@@ -1,5 +1,5 @@
-![christmas-6](https://user-images.githubusercontent.com/4975670/208306617-95222d81-af94-4585-bbfb-c6dbf3e48f4e.png)
+![github-banner-compressed](https://user-images.githubusercontent.com/4975670/208547997-8b1164ec-22eb-48a6-889a-264d83d92b25.jpg)
 
 ### Happy Holidays From Ubiquity DAO! 
 
-Anybody is welcome to contribute by joining our [DevPool](https://dao.ubq.fi/devpool)
+Everyone is welcome to contribute by joining our [DevPool](https://dao.ubq.fi/devpool).
