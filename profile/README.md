@@ -2,4 +2,4 @@
 
 ### Happy Holidays From Ubiquity DAO! 
 
-Everyone is welcome to contribute by joining our [DevPool](https://dao.ubq.fi/devpool).
+Everyone is welcome to contribute by joining the [DevPool](https://dao.ubq.fi/devpool).
