@@ -1,5 +1,5 @@
-![github-banner-compressed](https://user-images.githubusercontent.com/4975670/208547997-8b1164ec-22eb-48a6-889a-264d83d92b25.jpg)
+![github-banner-feb-2023](https://user-images.githubusercontent.com/4975670/219273130-6dc14872-0b74-4800-81a0-07d223af627f.jpg)
 
-### Happy Holidays From Ubiquity DAO! 
+### Welcome to Ubiquity DAO! 
 
 Everyone is welcome to contribute by joining the [DevPool](https://dao.ubq.fi/devpool).
