@@ -1,4 +1,4 @@
-![github-banner-feb-2023](https://user-images.githubusercontent.com/4975670/219273130-6dc14872-0b74-4800-81a0-07d223af627f.jpg)
+![github-banner-may-2023](https://github.com/ubiquity/.github/assets/4975670/7894a23b-b076-47f1-94fa-c07b762b2a2b)
 
 ### Welcome to Ubiquity DAO
 
