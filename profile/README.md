@@ -2,4 +2,4 @@
 
 ### Welcome to Ubiquity DAO
 
-You can contribute by joining the [DevPool](https://dao.ubq.fi/devpool)
+Contribute by joining the [DevPool](https://dao.ubq.fi/devpool)
