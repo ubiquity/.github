@@ -1,4 +1,5 @@
 ---
+chain-id: 100
 auto-pay-mode: true
 base-multiplier: 1000
 time-labels:
