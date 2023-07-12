@@ -3,9 +3,6 @@ name: Reusable cloudflare deploy
 on:
   workflow_call:
     inputs:
-      cloudflare_account_id:
-        required: false
-        type: string
       production_branch:
         required: false
         type: string
@@ -24,6 +21,8 @@ on:
     secrets:
       CLOUDFLARE_API_TOKEN:
         required: true
+      CLOUDFLARE_ACCOUNT_ID:
+        required: false
 
 jobs:
   deploy-to-cloudflare:
@@ -58,7 +57,7 @@ jobs:
         id: publish-to-cloudflare
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ inputs.cloudflare_account_id }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           REPOSITORY: ${{ github.repository }}
           PRODUCTION_BRANCH: ${{ inputs.production_branch || 'development' }}
           OUTPUT_DIRECTORY: ${{ env.OUTPUT_DIRECTORY }}
