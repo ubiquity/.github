@@ -32,7 +32,6 @@ jobs:
     env:
       OUTPUT_DIRECTORY: "pr"
 
-    if: ${{ github.event.workflow_run.conclusion == 'success' }}
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
