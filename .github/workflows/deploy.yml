@@ -37,11 +37,8 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
-          repository: whilefoo/.github
-          ref: reusable-workflow
-
-      - name: Test
-        run: ls -la ${{ github.workspace }}
+          repository: whilefoo/.github # temp for testing
+          ref: reusable-workflow # temp for testing
 
       - name: Setup Node
         uses: actions/setup-node@v3
