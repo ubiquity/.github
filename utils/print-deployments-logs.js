@@ -10,12 +10,12 @@ module.exports = async ({ github, context, fs, customDomain }) => {
 
   let defaultBody = deploymentsLog;
   let uniqueDeployUrl = deploymentsLog.match(/https:\/\/.+\.pages\.dev/gim);
-  if (customDomain) {
-    uniqueDeployUrl = uniqueDeployUrl.replace(/\..+$/, `.${customDomain}`);
-  }
   const botCommentsArray = [];
 
   if (uniqueDeployUrl) {
+    if (customDomain) {
+      uniqueDeployUrl = uniqueDeployUrl[0].replace(/\..+$/, `.${customDomain}`);
+    }
     const slicedSha = commitSha.slice(0, -33);
 
     defaultBody = `- [${slicedSha}](${uniqueDeployUrl})`;
