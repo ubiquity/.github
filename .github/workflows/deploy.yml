@@ -37,7 +37,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
-          repository: ubiquity/.github
+          repository: whilefoo/.github
           ref: reusable-workflow
 
       - name: Test
