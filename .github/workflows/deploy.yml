@@ -40,6 +40,9 @@ jobs:
           repository: ubiquity/.github
           ref: reusable-workflow
 
+      - name: Test
+        run: ls -la ${{ github.workspace }}
+
       - name: Setup Node
         uses: actions/setup-node@v3
         with:
