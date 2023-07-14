@@ -3,19 +3,16 @@ name: Reusable cloudflare deploy
 on:
   workflow_call:
     inputs:
+      custom_domain:
+        required: false
+        type: string
       production_branch:
         required: false
         type: string
       build_artifact_name:
         required: false
         type: string
-      build_workflow_name:
-        required: false
-        type: string
-      pr_artifact_name:
-        required: false
-        type: string
-      pr_workflow_name:
+      build_artifact_run_id:
         required: false
         type: string
     secrets:
@@ -23,6 +20,10 @@ on:
         required: true
       CLOUDFLARE_ACCOUNT_ID:
         required: false
+      UBIQUITY_BOUNTY_BOT_APP_ID:
+        required: true
+      UBIQUITY_BOUNTY_BOT_PRIVATE_KEY:
+        required: true
 
 jobs:
   deploy-to-cloudflare:
@@ -31,12 +32,12 @@ jobs:
     permissions:
       contents: read
       pull-requests: write
-    env:
-      OUTPUT_DIRECTORY: "pr"
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        with:
+          repository: ubiquity/.github
 
       - name: Setup Node
         uses: actions/setup-node@v3
@@ -46,12 +47,19 @@ jobs:
       - name: Wrangler Install
         run: npm install -g wrangler
 
-      - name: Download build artifact
-        uses: dawidd6/action-download-artifact@v2
+      - name: "Download Artifact"
+        uses: actions/github-script@v6.3.3
         with:
-          name: ${{ inputs.build_artifact_name || 'pr' }}
-          workflow: ${{ inputs.build_workflow_name || 'build.yml' }}
-          path: ${{ env.OUTPUT_DIRECTORY }}
+          script: |
+            const fs = require("fs");
+            const downloadArtifact = require('${{ github.workspace }}/utils/download-artifact.js');
+            const workflow_run_id = '${{ inputs.build_artifact_run_id || github.event.workflow_run.id }}';
+            const artifact_name = '${{ inputs.build_artifact_name || 'pr' }}';
+            const workspace = '${{ github.workspace }}';
+            downloadArtifact({ github, context, fs, workflow_run_id, artifact_name, workspace })
+
+      - name: Extract Artifact
+        run: mkdir ./dist && unzip pr.zip && unzip pull-request.zip -d ./dist && ls
 
       - name: Publish to Cloudflare
         id: publish-to-cloudflare
@@ -60,7 +68,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
           REPOSITORY: ${{ github.repository }}
           PRODUCTION_BRANCH: ${{ inputs.production_branch || 'development' }}
-          OUTPUT_DIRECTORY: ${{ env.OUTPUT_DIRECTORY }}
+          OUTPUT_DIRECTORY: "./dist"
         run: |
           IFS='/' read -ra fields <<< "$REPOSITORY"
           projectName="${fields[1]}"
@@ -73,31 +81,22 @@ jobs:
             echo "Project not found"
             wrangler pages project create "$projectName" --production-branch "$PRODUCTION_BRANCH"
           fi
-          echo DEPLOY_URL=$(wrangler pages deploy "$OUTPUT_DIRECTORY" --project-name "$projectName" | grep -Eo "(http|https)://[a-zA-Z0-9./?=_%:-]*") >> $GITHUB_OUTPUT
+          wrangler pages deploy "$OUTPUT_DIRECTORY" --project-name "$projectName" > ./deployments.log
+          cat deployments.log
 
-      - name: Print deploy URL
-        run: echo ${{ steps.publish-to-cloudflare.outputs.DEPLOY_URL }}
-
-      - name: Download PR number artifact
-        uses: dawidd6/action-download-artifact@v2
+      - name: Get UbiquiBot Token
+        uses: tibdex/github-app-token@v1.7.0
+        id: get_installation_token
         with:
-          name: ${{ inputs.pr_artifact_name || 'pr-num' }}
-          workflow: ${{ inputs.pr_workflow_name || 'build.yml' }}
-          path: pr-num
+          app_id: ${{ secrets.UBIQUITY_BOUNTY_BOT_APP_ID }}
+          private_key: ${{ secrets.UBIQUITY_BOUNTY_BOT_PRIVATE_KEY }}
 
-      - name: Read PR number from file
-        id: pr-num-reader
-        uses: juliangruber/read-file-action@v1.1.6
+      - name: Deploy Comment as UbiquiBot
+        uses: actions/github-script@v6
         with:
-          path: pr-num/pr-num.txt
-
-      - name: Print PR number from file
-        run: echo ${{ steps.pr-num-reader.outputs.content }}
-
-      - name: Comment PR
-        # PR number exists only on "pull_request" event so comment only when it exists
-        if: ${{ steps.pr-num-reader.outputs.content }}
-        uses: peter-evans/create-or-update-comment@v3
-        with:
-          body: ${{ steps.publish-to-cloudflare.outputs.DEPLOY_URL }}
-          issue-number: ${{ steps.pr-num-reader.outputs.content }}
+          github-token: ${{ steps.get_installation_token.outputs.token }}
+          script: |
+            const fs = require("fs");
+            const printDeploymentsLog = require('${{ github.workspace }}/utils/print-deployments-logs.js');
+            const customDomain = "${{ inputs.custom_domain || '' }}";
+            await printDeploymentsLog({ github, context, fs, customDomain });
