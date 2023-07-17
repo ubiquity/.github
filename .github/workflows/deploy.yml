@@ -37,8 +37,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v3
         with:
-          repository: whilefoo/.github # temp for testing
-          ref: reusable-workflow # temp for testing
+          repository: ubiquity/.github
 
       - name: Setup Node
         uses: actions/setup-node@v3
