@@ -3,3 +3,6 @@
 ### Welcome to Ubiquity DAO
 
 Contribute by joining the [DevPool](https://dao.ubq.fi/devpool)
+
+DevPool is open to other companies that are using GitHub actively and are good in R&D.
+If you introduce us to technical decision-makers of such companies, you will get a nice bonus. 
