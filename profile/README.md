@@ -1,4 +1,4 @@
-![github-banner-may-2023](https://github.com/ubiquity/.github/assets/4975670/7894a23b-b076-47f1-94fa-c07b762b2a2b)
+![pay ubq fi_](https://github.com/ubiquity/.github/assets/4975670/66e99ea3-ba38-4c6a-9ca5-cf5d4586c917)
 
 ### Welcome to Ubiquity DAO
 
