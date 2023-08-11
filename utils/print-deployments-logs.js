@@ -77,13 +77,12 @@ module.exports = async ({ github, context, fs, customDomain }) => {
   const editExistingPRComment = async () => {
     const { body: botBody, id: commentId } = botCommentsArray[0];
     let commentBody = `${GMTConverter(defaultBody)}\n` + `${GMTConverter(botBody)}`;
-    const sortCommentBody = sortComments(commentBody);
-    verifyInput(sortCommentBody) &&
+    verifyInput(commentBody) &&
       (await github.rest.issues.updateComment({
         owner: context.repo.owner,
         repo: context.repo.repo,
         comment_id: commentId,
-        body: sortCommentBody,
+        body: commentBody,
       }));
   };
 
@@ -103,8 +102,7 @@ module.exports = async ({ github, context, fs, customDomain }) => {
     botCommentsArray.forEach(({ body }) => {
       commentBody = commentBody + `${GMTConverter(body)}\n`;
     });
-    const sortCommentBody = sortComments(commentBody);
-    await createNewPRComment(sortCommentBody);
+    await createNewPRComment(commentBody);
     await deleteExistingPRComments();
   };
 
