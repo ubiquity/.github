@@ -131,7 +131,7 @@ module.exports = async ({ github, context, fs, customDomain }) => {
 
     if (commentsArray.length > 0) {
       commentsArray.forEach((elem) => {
-        if (elem.user.type === "Bot" && elem.user.login === "ubiquibot[bot]") {
+        if (elem.user.type === "Bot" && elem.user.login === "ubiquibot-rndquu[bot]") {
           botCommentsArray.push(elem);
         }
       });
