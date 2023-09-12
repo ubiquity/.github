@@ -3,3 +3,5 @@
 ### Welcome to Ubiquity DAO
 
 Contribute by joining the [DevPool](https://dao.ubq.fi/devpool)
+
+Introduce us to other projects and get a reward!
