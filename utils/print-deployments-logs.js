@@ -108,7 +108,7 @@ module.exports = async ({ github, context, fs, customDomain }) => {
   const mergeExistingPRComments = async () => {
     let commentBody = alignRight(`${GMTConverter(defaultBody)}\n`);
     botCommentsArray.forEach(({ body }) => {
-      commentBody = commentBody + `${GMTConverter(alignRight(body))}\n`;
+      commentBody = commentBody + alignRight(`${GMTConverter(body)}\n`);
     });
     await createNewPRComment(commentBody);
     await deleteExistingPRComments();
