@@ -31,7 +31,7 @@ module.exports = async ({ github, context, fs, customDomain }) => {
 
   const alignRight = (bodyData) => {
     if (!bodyData.startsWith('<div align="right">')) {
-      return `<div align="right"><p>${bodyData}</p></div>`;
+      return `<div align="right">${bodyData}</div>`;
     } else {
       return bodyData;
     }
