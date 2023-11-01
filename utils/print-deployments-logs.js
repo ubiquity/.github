@@ -18,7 +18,7 @@ module.exports = async ({ github, context, fs, customDomain }) => {
     }
     const slicedSha = commitSha.slice(0, -33);
 
-    defaultBody = `- [${slicedSha}](${uniqueDeployUrl})`;
+    defaultBody = `<a href="${uniqueDeployUrl}"><code>${slicedSha}</code></a>`;
   }
 
   const verifyInput = (data) => {
@@ -27,6 +27,14 @@ module.exports = async ({ github, context, fs, customDomain }) => {
 
   const GMTConverter = (bodyData) => {
     return bodyData.replace("GMT+0000 (Coordinated Universal Time)", "(UTC)");
+  };
+
+  const alignRight = (bodyData) => {
+    if (!bodyData.startsWith('<div align="right">')) {
+      return `<div align="right">${bodyData}</div>`;
+    } else {
+      return bodyData;
+    }
   };
 
   const sortComments = (bodyData) => {
@@ -59,7 +67,7 @@ module.exports = async ({ github, context, fs, customDomain }) => {
         owner: context.repo.owner,
         repo: context.repo.repo,
         commit_sha: commitSha,
-        body: body,
+        body: alignRight(body),
       }));
   };
 
@@ -70,13 +78,13 @@ module.exports = async ({ github, context, fs, customDomain }) => {
         owner: context.repo.owner,
         repo: context.repo.repo,
         issue_number: pullRequestNumber,
-        body: body,
+        body: alignRight(body),
       }));
   };
 
   const editExistingPRComment = async () => {
     const { body: botBody, id: commentId } = botCommentsArray[0];
-    let commentBody = `${GMTConverter(defaultBody)}\n` + `${GMTConverter(botBody)}`;
+    let commentBody = alignRight(`${GMTConverter(defaultBody)}\n`) + alignRight(`${GMTConverter(botBody)}`);
     verifyInput(commentBody) &&
       (await github.rest.issues.updateComment({
         owner: context.repo.owner,
@@ -98,9 +106,9 @@ module.exports = async ({ github, context, fs, customDomain }) => {
   };
 
   const mergeExistingPRComments = async () => {
-    let commentBody = `${GMTConverter(defaultBody)}\n`;
+    let commentBody = alignRight(`${GMTConverter(defaultBody)}\n`);
     botCommentsArray.forEach(({ body }) => {
-      commentBody = commentBody + `${GMTConverter(body)}\n`;
+      commentBody = commentBody + alignRight(`${GMTConverter(body)}\n`);
     });
     await createNewPRComment(commentBody);
     await deleteExistingPRComments();
