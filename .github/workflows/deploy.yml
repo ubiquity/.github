@@ -1,4 +1,4 @@
-name: Reusable cloudflare deploy
+name: Automatic Cloudflare Deploy
 
 on:
   workflow_call:
