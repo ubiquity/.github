@@ -1,4 +1,4 @@
-name: Reusable cloudflare deploy
+name: Automatic Cloudflare Deploy
 
 on:
   workflow_call:
@@ -20,9 +20,9 @@ on:
         required: true
       CLOUDFLARE_ACCOUNT_ID:
         required: false
-      UBIQUITY_BOUNTY_BOT_APP_ID:
+      APP_ID:
         required: true
-      UBIQUITY_BOUNTY_BOT_PRIVATE_KEY:
+      APP_PRIVATE_KEY:
         required: true
 
 jobs:
@@ -88,8 +88,8 @@ jobs:
         uses: tibdex/github-app-token@v1.7.0
         id: get_installation_token
         with:
-          app_id: ${{ secrets.UBIQUITY_BOUNTY_BOT_APP_ID }}
-          private_key: ${{ secrets.UBIQUITY_BOUNTY_BOT_PRIVATE_KEY }}
+          app_id: ${{ secrets.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
 
       - name: Deploy Comment as UbiquiBot
         uses: actions/github-script@v6
