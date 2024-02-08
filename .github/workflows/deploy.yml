@@ -15,6 +15,9 @@ on:
       build_artifact_run_id:
         required: false
         type: string
+      deploy_preview_branches:
+        required: false
+        type: boolean
     secrets:
       CLOUDFLARE_API_TOKEN:
         required: true
@@ -72,6 +75,7 @@ jobs:
           REPOSITORY: ${{ github.repository }}
           PRODUCTION_BRANCH: ${{ inputs.production_branch || 'development' }}
           OUTPUT_DIRECTORY: "./dist"
+          DEPLOY_PREVIEW_BRANCHES: ${{ inputs.deploy_preview_branches || false }}
         run: |
           IFS="/" read -ra fields <<< "$REPOSITORY"
           projectName="${fields[1]}"
@@ -84,7 +88,11 @@ jobs:
             echo "Project not found"
             wrangler pages project create "$projectName" --production-branch "$PRODUCTION_BRANCH"
           fi
-          wrangler pages deploy "$OUTPUT_DIRECTORY" --project-name "$projectName" > ./deployments.log
+          if [ "$DEPLOY_PREVIEW_BRANCHES" = true ]; then
+            wrangler pages dev "$OUTPUT_DIRECTORY" --project-name "$projectName" > ./deployments.log
+          else
+            wrangler pages deploy "$OUTPUT_DIRECTORY" --project-name "$projectName" > ./deployments.log
+          fi
           cat deployments.log
 
       - name: Get UbiquiBot Token
