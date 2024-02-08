@@ -25,13 +25,6 @@ module.exports = async function printDeploymentsLogs({ github, context, fs, cust
     return data !== "";
   };
 
-  function sortComments(bodyData) {
-    const bodyArray = bodyData.split("\n").filter((elem) => elem.includes("<code>"));
-    const sortedBodyArray = bodyArray.sort();
-    const commentBody = sortedBodyArray.join("\n");
-    return commentBody;
-  };
-
   function alignRight(bodyData) {
     if (!bodyData.startsWith('<div align="right">')) {
       return `<div align="right">${bodyData}</div>`;
@@ -51,7 +44,6 @@ module.exports = async function printDeploymentsLogs({ github, context, fs, cust
   };
 
   async function createNewPullRequestComment(body = defaultBody) {
-
     verifyInput(body) &&
       (await github.rest.issues.createComment({
         owner: context.repo.owner,
@@ -63,8 +55,7 @@ module.exports = async function printDeploymentsLogs({ github, context, fs, cust
 
   async function editExistingPullRequestComment() {
     const { body: botBody, id: commentId } = botCommentsArray[0];
-    let commentBody = alignRight(`${(defaultBody)}\n`) + alignRight(`${(botBody)}`);
-    commentBody = sortComments(commentBody);
+    let commentBody = alignRight(`${(botBody)}\n`) + alignRight(`${(defaultBody)}`);
     verifyInput(commentBody) &&
       (await github.rest.issues.updateComment({
         owner: context.repo.owner,
@@ -90,7 +81,6 @@ module.exports = async function printDeploymentsLogs({ github, context, fs, cust
     botCommentsArray.forEach(({ body }) => {
       commentBody = commentBody + alignRight(`${(body)}\n`);
     });
-    commentBody = sortComments(commentBody);
     await createNewPullRequestComment(commentBody);
     await deleteExistingPullRequestComments();
   }
