@@ -1,5 +1,5 @@
 //@ts-check
-module.exports = async ({ github, context, fs, customDomain }) => {
+module.exports = async function printDeploymentsLogs({ github, context, fs, customDomain }) {
   const pullRequestInfo = fs.readFileSync("./pr_number").toString("utf-8");
   console.log({ pullRequestInfo });
   const infoSubstring = pullRequestInfo.split(",");
@@ -21,15 +21,18 @@ module.exports = async ({ github, context, fs, customDomain }) => {
     defaultBody = `<a href="${uniqueDeployUrl}"><code>${slicedSha}</code></a>`;
   }
 
-  const verifyInput = (data) => {
+  function verifyInput(data) {
     return data !== "";
   };
 
-  const GMTConverter = (bodyData) => {
-    return bodyData.replace("GMT+0000 (Coordinated Universal Time)", "(UTC)");
+  function sortComments(bodyData) {
+    const bodyArray = bodyData.split("\n").filter((elem) => elem.includes("<code>"));
+    const sortedBodyArray = bodyArray.sort();
+    const commentBody = sortedBodyArray.join("\n");
+    return commentBody;
   };
 
-  const alignRight = (bodyData) => {
+  function alignRight(bodyData) {
     if (!bodyData.startsWith('<div align="right">')) {
       return `<div align="right">${bodyData}</div>`;
     } else {
@@ -37,31 +40,7 @@ module.exports = async ({ github, context, fs, customDomain }) => {
     }
   };
 
-  const sortComments = (bodyData) => {
-    const bodyArray = bodyData.split("\n").filter((elem) => elem.includes("Deployment"));
-    let commentBody = ``;
-    const timeArray = [];
-    const timeObj = {};
-    bodyArray.forEach((element) => {
-      const timestamp = new Date(
-        element
-          .match(/Deployment:.*\(UTC\)/)[0]
-          .replace("Deployment:", "")
-          .trim()
-      ).getTime();
-      timeArray.push(timestamp);
-      timeObj[timestamp] = element;
-    });
-    const timeSortArray = timeArray.sort();
-
-    timeSortArray.forEach((em) => {
-      commentBody = commentBody + `${timeObj[em]}\n`;
-    });
-    return commentBody;
-  };
-
-  const createNewCommitComment = async (body = defaultBody) => {
-    body = GMTConverter(body);
+  async function createNewCommitComment(body = defaultBody) {
     verifyInput(body) &&
       (await github.rest.repos.createCommitComment({
         owner: context.repo.owner,
@@ -71,8 +50,8 @@ module.exports = async ({ github, context, fs, customDomain }) => {
       }));
   };
 
-  const createNewPRComment = async (body = defaultBody) => {
-    body = GMTConverter(body);
+  async function createNewPullRequestComment(body = defaultBody) {
+
     verifyInput(body) &&
       (await github.rest.issues.createComment({
         owner: context.repo.owner,
@@ -82,9 +61,10 @@ module.exports = async ({ github, context, fs, customDomain }) => {
       }));
   };
 
-  const editExistingPRComment = async () => {
+  async function editExistingPullRequestComment() {
     const { body: botBody, id: commentId } = botCommentsArray[0];
-    let commentBody = alignRight(`${GMTConverter(defaultBody)}\n`) + alignRight(`${GMTConverter(botBody)}`);
+    let commentBody = alignRight(`${(defaultBody)}\n`) + alignRight(`${(botBody)}`);
+    commentBody = sortComments(commentBody);
     verifyInput(commentBody) &&
       (await github.rest.issues.updateComment({
         owner: context.repo.owner,
@@ -94,8 +74,8 @@ module.exports = async ({ github, context, fs, customDomain }) => {
       }));
   };
 
-  const deleteExistingPRComments = async () => {
-    const delPromises = botCommentsArray.map(async (elem) => {
+  async function deleteExistingPullRequestComments() {
+    const delPromises = botCommentsArray.map(async function (elem) {
       await github.rest.issues.deleteComment({
         owner: context.repo.owner,
         repo: context.repo.repo,
@@ -105,16 +85,17 @@ module.exports = async ({ github, context, fs, customDomain }) => {
     await Promise.all(delPromises);
   };
 
-  const mergeExistingPRComments = async () => {
-    let commentBody = alignRight(`${GMTConverter(defaultBody)}\n`);
+  async function mergeExistingPullRequestComments() {
+    let commentBody = alignRight(`${(defaultBody)}\n`);
     botCommentsArray.forEach(({ body }) => {
-      commentBody = commentBody + alignRight(`${GMTConverter(body)}\n`);
+      commentBody = commentBody + alignRight(`${(body)}\n`);
     });
-    await createNewPRComment(commentBody);
-    await deleteExistingPRComments();
-  };
+    commentBody = sortComments(commentBody);
+    await createNewPullRequestComment(commentBody);
+    await deleteExistingPullRequestComments();
+  }
 
-  const processPRComments = async () => {
+  async function processPullRequestComments() {
     const perPage = 30;
     let pageNumber = 1;
     let hasMore = true;
@@ -147,26 +128,26 @@ module.exports = async ({ github, context, fs, customDomain }) => {
       switch (botLen) {
         case 0:
           //no (bot) comments
-          createNewPRComment();
+          createNewPullRequestComment();
           break;
         case 1:
           //single (bot) comment []
-          editExistingPRComment();
+          editExistingPullRequestComment();
           break;
         default:
           //multiple (bot) comments []
-          mergeExistingPRComments();
+          mergeExistingPullRequestComments();
           break;
       }
     } else {
       //no comments (user|bot) []
-      createNewPRComment();
+      createNewPullRequestComment();
     }
-  };
+  }
 
   if (eventName == "pull_request") {
     console.log("Creating a comment for the pull request");
-    await processPRComments();
+    await processPullRequestComments();
   } else {
     console.log("Creating a comment for the commit");
     await createNewCommitComment();
