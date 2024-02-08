@@ -35,31 +35,34 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ubiquity/.github
 
       - name: Setup Node
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: "18.14.1"
+          node-version: "20.10.0"
 
       - name: Wrangler Install
-        run: npm install -g wrangler
+        run: yarn add -g wrangler
 
       - name: "Download Artifact"
         uses: actions/github-script@v6.3.3
         with:
           script: |
             const fs = require("fs");
-            const downloadArtifact = require('${{ github.workspace }}/utils/download-artifact.js');
-            const workflow_run_id = '${{ inputs.build_artifact_run_id || github.event.workflow_run.id }}';
-            const artifact_name = '${{ inputs.build_artifact_name || 'pr' }}';
-            const workspace = '${{ github.workspace }}';
-            downloadArtifact({ github, context, fs, workflow_run_id, artifact_name, workspace })
+            const downloadArtifact = require("${{ github.workspace }}/utils/download-artifact.js");
+            const workflowRunId = "${{ inputs.build_artifact_run_id || github.event.workflow_run.id }}";
+            const artifactName = "${{ inputs.build_artifact_name || 'pr' }}";
+            downloadArtifact({ github, context, fs, workflowRunId, artifactName });
 
       - name: Extract Artifact
-        run: mkdir ./dist && unzip pr.zip && unzip pull-request.zip -d ./dist && ls
+        run: |
+          mkdir ./dist
+          unzip pull-request-artifact.zip
+          unzip pull-request.zip -d ./dist
+          ls
 
       - name: Publish to Cloudflare
         id: publish-to-cloudflare
@@ -70,9 +73,9 @@ jobs:
           PRODUCTION_BRANCH: ${{ inputs.production_branch || 'development' }}
           OUTPUT_DIRECTORY: "./dist"
         run: |
-          IFS='/' read -ra fields <<< "$REPOSITORY"
+          IFS="/" read -ra fields <<< "$REPOSITORY"
           projectName="${fields[1]}"
-          projectName=$(echo $projectName | sed 's/\./-/g')
+          projectName=$(echo $projectName | sed "s/\./-/g")
           echo $projectName
           wrangler pages project list > project_list.txt
           if grep -q $projectName project_list.txt; then
@@ -97,6 +100,6 @@ jobs:
           github-token: ${{ steps.get_installation_token.outputs.token }}
           script: |
             const fs = require("fs");
-            const printDeploymentsLog = require('${{ github.workspace }}/utils/print-deployments-logs.js');
+            const printDeploymentsLog = require("${{ github.workspace }}/utils/print-deployments-logs.js");
             const customDomain = "${{ inputs.custom_domain || '' }}";
             await printDeploymentsLog({ github, context, fs, customDomain });
