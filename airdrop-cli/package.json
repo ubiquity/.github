@@ -1,0 +1,41 @@
+{
+  "name": "ubq-airdrop-cli",
+  "version": "1.0.0",
+  "description": "",
+  "author": "Keyrxng",
+  "main": "dist/index.js",
+  "scripts": {
+    "start": "node dist/index.js",
+    "tally": "node dist/index.js tally",
+    "tally-multi-csv": "node dist/index.js tally-multi-csv",
+    "tally-from": "node dist/index.js tally-from",
+    "single": "node dist/index.js single",
+    "help": "node dist/index.js help",
+    "build": "npx tsc",
+    "test": "npx jest"
+  },
+  "keywords": [
+    "UBQ",
+    "UbiquityDAO",
+    "Airdrop",
+    "cli",
+    "typescript",
+    "graphql",
+    "github"
+  ],
+  "license": "ISC",
+  "devDependencies": {
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.11.17",
+    "jest": "^29.7.0",
+    "ts-jest": "^29.1.2",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "axios": "^1.6.7",
+    "clime": "^0.5.16",
+    "dotenv": "^16.4.1",
+    "graphql": "^16.8.1",
+    "graphql-request": "^6.1.0"
+  }
+}
