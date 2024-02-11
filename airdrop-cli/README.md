@@ -7,7 +7,7 @@ This CLI tool tallies UBQ airdrop amounts for contributors. It does this by pars
 1. **GitHub Token**
     - Add the token to ``.env`` as `GITHUB_TOKEN`.
 2. **Install Dependencies**
-    - Install the required dependencies using `npm` as yarn has issues with the graphql package.
+    - Install the required dependencies using `npm` or `yarn`.
 
     ```bash
     # npm install
@@ -16,14 +16,14 @@ This CLI tool tallies UBQ airdrop amounts for contributors. It does this by pars
     - Build the CLI using the available commands.
 
     ```bash
-    # npm run build
+    # npm run cli:build
     ```
 
 4. **Run the CLI**
     - Run the CLI using the available commands.
 
     ```bash
-    # npm run start
+    # npm run cli:start
     ```
 
 ## Commands
@@ -31,42 +31,42 @@ This CLI tool tallies UBQ airdrop amounts for contributors. It does this by pars
     - Display information about the available commands and their usage.
 
     ```bash
-    # yarn start
+    # yarn cli:start
     ```
 
 2. **single**
     - Tally UBQ airdrop for a specific repository or shortcode from the beginning of 2023.
 
     ```bash
-    # yarn single [shortcode/repo-name]
+    # yarn cli:single [shortcode/repo-name]
     ```
 
 3. **tally**
     - Tally UBQ airdrop for all indexable repositories since the start of 2023.
 
     ```bash
-    # yarn tally
+    # yarn cli:tally
     ```
 
 4. **tally-from**
     - Tally UBQ airdrop for all indexable repositories since a specified date (YYYY-MM-DD).
 
     ```bash
-    # yarn tally-from [date]
+    # yarn cli:tally-from [date]
     ```
 
 5. **tally-multi-csv**
     - Tally UBQ airdrop for all indexable repositories since the start of 2023 and output repository-specific CSV files.
 
     ```bash
-    # yarn tally-multi-csv
+    # yarn cli:tally-multi-csv
     ```
 
 6. **help**
     - Display a list of indexable repositories and their shortcodes.
 
     ```bash
-    # yarn run help
+    # yarn run cli:help
     ```
 
 ## Output
@@ -86,27 +86,27 @@ The CLI outputs three CSV files:
 1. Tally UBQ airdrop for a specific repository or shortcode:
 
     ```bash
-    # npm run single dollar || npm single ubiquity-dollar
+    # npm run cli:single dollar || npm single ubiquity-dollar
     ```
 
 2. Tally UBQ airdrop for all indexable repositories since the start of 2023:
 
     ```bash
-    # npm run tally
+    # npm run cli:tally
     ```
 
 3. Tally UBQ airdrop for all indexable repositories since a specified date:
 
     ```bash
-    # npm run tally-from 2023-01-01
+    # npm run cli:tally-from 2023-01-01
     ```
 4. Tally UBQ airdrop for all indexable repositories since the start of 2023 and output repository-specific CSV files:
 
     ```bash
-    # npm run tally-multi-csv
+    # npm run cli:tally-multi-csv
     ```
 5. Display a list of indexable repositories and their shortcodes:
 
     ```bash
-    # npm run help
+    # npm run cli:help
     ```

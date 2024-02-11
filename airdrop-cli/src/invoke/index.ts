@@ -1,13 +1,7 @@
 import * as dotenv from "dotenv";
 import { request, gql } from "graphql-request";
 import { loadingBar, writeCSV } from "../utils";
-import {
-  Repositories,
-  PaymentInfo,
-  NoPayments,
-  Contributor,
-  CSVData,
-} from "../types";
+import { Repositories, PaymentInfo, NoPayments, Contributor, CSVData } from "../types";
 
 dotenv.config();
 
@@ -19,10 +13,7 @@ export async function invoke(timeFrom?: string) {
   const since = "2023-01-01T00:00:00.000Z";
   const loader = await loadingBar();
 
-  const data: CSVData | undefined = await processRepositories(
-    org,
-    timeFrom ? timeFrom : since
-  );
+  const data: CSVData | undefined = await processRepositories(org, timeFrom ? timeFrom : since);
 
   if (!data) {
     throw new Error("No data found processing all repositories.");
@@ -33,10 +24,7 @@ export async function invoke(timeFrom?: string) {
   clearInterval(loader);
 }
 
-export async function fetchPublicRepositories(
-  org: string = "Ubiquity",
-  repo?: string
-): Promise<Repositories[]> {
+export async function fetchPublicRepositories(org: string = "Ubiquity", repo?: string): Promise<Repositories[]> {
   let hasNextPage = true;
   let cursor = null;
   const repositories: Repositories[] = [];
@@ -74,21 +62,14 @@ export async function fetchPublicRepositories(
   `;
 
   while (hasNextPage) {
-    const response: any = await request(
-      GITHUB_GRAPHQL_API,
-      query,
-      { org, cursor },
-      { Authorization: `Bearer ${GITHUB_TOKEN}` }
-    );
+    const response: any = await request(GITHUB_GRAPHQL_API, query, { org, cursor }, { Authorization: `Bearer ${GITHUB_TOKEN}` });
 
     const repos = response.organization.repositories.edges;
 
     for (const repo of repos) {
       const repoInfo = repo.node;
       const lastCommitDate =
-        repoInfo.defaultBranchRef?.target?.history.edges.length > 0
-          ? repoInfo.defaultBranchRef.target.history.edges[0].node.committedDate
-          : null;
+        repoInfo.defaultBranchRef?.target?.history.edges.length > 0 ? repoInfo.defaultBranchRef.target.history.edges[0].node.committedDate : null;
 
       repositories.push({
         name: repoInfo.name,
@@ -121,12 +102,7 @@ export async function fetchPaymentsForRepository(
   const noAssigneePayments = new Set<PaymentInfo>();
 
   const query = gql`
-    query (
-      $org: String!
-      $repoName: String!
-      $cursor: String
-      $since: DateTime
-    ) {
+    query ($org: String!, $repoName: String!, $cursor: String, $since: DateTime) {
       repository(owner: $org, name: $repoName) {
         issues(first: 100, after: $cursor, filterBy: { since: $since }) {
           pageInfo {
@@ -164,22 +140,14 @@ export async function fetchPaymentsForRepository(
   `;
 
   while (hasNextPage) {
-    const response: any = await request(
-      GITHUB_GRAPHQL_API,
-      query,
-      { org, repoName, cursor, since },
-      { Authorization: `Bearer ${GITHUB_TOKEN}` }
-    );
+    const response: any = await request(GITHUB_GRAPHQL_API, query, { org, repoName, cursor, since }, { Authorization: `Bearer ${GITHUB_TOKEN}` });
 
     for (const issue of response.repository.issues.edges) {
       const issueNumber = issue.node.number;
       const issueCreator = issue.node.author?.login;
 
       // Issues without an assignee are typically issues reopened or edge cases
-      const issueAssignee =
-        issue.node.assignees.edges.length > 0
-          ? issue.node.assignees.edges[0].node?.login
-          : "No assignee";
+      const issueAssignee = issue.node.assignees.edges.length > 0 ? issue.node.assignees.edges[0].node?.login : "No assignee";
 
       /**
        * the below works well enough but it's incorrectly assigning the occasional payment
@@ -201,14 +169,10 @@ export async function fetchPaymentsForRepository(
         const body = comment.node.body;
 
         // Match: [ CLAIM 12.5 DAI ] typically the assignee's award
-        const match = body.match(
-          /.*\[ CLAIM (\d+(\.\d+)?) (XDAI|DAI|WXDAI) \]/
-        );
+        const match = body.match(/.*\[ CLAIM (\d+(\.\d+)?) (XDAI|DAI|WXDAI) \]/);
 
         // Match: [ **[ 12.5 DAI ]] typically the newer <details> type awards
-        const altMatch = body.match(
-          /.*\[ \[ \*?(\d+(\.\d+)?) \*?(XDAI|DAI|WXDAI)\*? \]\]/
-        );
+        const altMatch = body.match(/.*\[ \[ \*?(\d+(\.\d+)?) \*?(XDAI|DAI|WXDAI)\*? \]\]/);
 
         /**
          * Most of the time the awards are in the format:
@@ -222,24 +186,15 @@ export async function fetchPaymentsForRepository(
         if (match) {
           const rematch = body.match(/CLAIM (\d+(\.\d+)?) (XDAI|DAI|WXDAI)/);
           const creator = body.includes("Task Creator Reward") ? true : false;
-          const conversation = body.includes("Conversation Reward")
-            ? true
-            : false;
+          const conversation = body.includes("Conversation Reward") ? true : false;
 
           // comments around the start of 2023 do not have creator/conversation prefixes
           // but those types of comments were not introduced until the end of 2023
-          // so we're best guessing they are creator rewards
+          // so we're best guessing they are assignee rewards
 
-          const type = creator
-            ? "creator"
-            : conversation
-            ? "conversation"
-            : "assignee";
+          const type = creator ? "creator" : conversation ? "conversation" : "assignee";
 
-          if (
-            body.includes(`: [ CLAIM`) &&
-            comment.node.author?.login === "ubiquibot"
-          ) {
+          if (body.includes(`: [ CLAIM`) && comment.node.author?.login === "ubiquibot") {
             // this should be either the creator's or conversation awards as they are named
             // the only time this rule breaks is the <details> type awards and the assignee is named too
             // although the claim format is different 'gitcoindev: [ CLAIM 18.6 WXDAI ]' vs '[ [ 18.6 WXDAI ] ]'
@@ -307,32 +262,22 @@ export async function fetchPaymentsForRepository(
 
         if (altMatch && comment.node.author?.login === "ubiquibot") {
           // this is the newer <details> type awards
-          const users = altMatch.input
-            .match(/###### @\w+/g)
-            .map((user: string) => user.split(" ")[1]);
+          const users = altMatch.input.match(/###### @\w+/g).map((user: string) => user.split(" ")[1]);
 
           // multiple payouts so pulling them both out
-          const payouts = altMatch.input.match(
-            /\*?(\d+(\.\d+)?) \*?(XDAI|DAI|WXDAI)\*?/g
-          );
+          const payouts = altMatch.input.match(/\*?(\d+(\.\d+)?) \*?(XDAI|DAI|WXDAI)\*?/g);
 
           for (const user of users) {
             let usr = user.split("@")[1];
 
             const assigneeReward = issueAssignee === usr;
             const creatorReward = issueCreator === usr;
-            const type = assigneeReward
-              ? "assignee"
-              : creatorReward
-              ? "creator"
-              : "conversation";
+            const type = assigneeReward ? "assignee" : creatorReward ? "creator" : "conversation";
 
             payments.add({
               repoName,
               issueNumber,
-              paymentAmount: parseFloat(
-                payouts[users.indexOf(user)].split(" ")[0]
-              ),
+              paymentAmount: parseFloat(payouts[users.indexOf(user)].split(" ")[0]),
               currency: payouts[users.indexOf(user)].split(" ")[1],
               payee: usr,
               type,
@@ -364,31 +309,21 @@ export async function fetchPaymentsForRepository(
           // but matches without the bot as the author. I've only seen this once so far
           // https://github.com/ubiquity/ubiquibot-kernel/issues/5#issuecomment-1923562557
 
-          const users = altMatch.input
-            .match(/###### @\w+/g)
-            .map((user: string) => user.split(" ")[1]);
+          const users = altMatch.input.match(/###### @\w+/g).map((user: string) => user.split(" ")[1]);
 
-          const payouts = altMatch.input.match(
-            /\*?(\d+(\.\d+)?) \*?(XDAI|DAI|WXDAI)\*?/g
-          );
+          const payouts = altMatch.input.match(/\*?(\d+(\.\d+)?) \*?(XDAI|DAI|WXDAI)\*?/g);
 
           for (const user of users) {
             let usr = user.split("@")[1];
 
             const assigneeReward = issueAssignee === usr;
             const creatorReward = issueCreator === usr;
-            const type = assigneeReward
-              ? "assignee"
-              : creatorReward
-              ? "creator"
-              : "conversation";
+            const type = assigneeReward ? "assignee" : creatorReward ? "creator" : "conversation";
 
             payments.add({
               repoName,
               issueNumber,
-              paymentAmount: parseFloat(
-                payouts[users.indexOf(user)].split(" ")[0]
-              ),
+              paymentAmount: parseFloat(payouts[users.indexOf(user)].split(" ")[0]),
               currency: payouts[users.indexOf(user)].split(" ")[1],
               payee: usr,
               type,
@@ -425,12 +360,7 @@ export async function fetchPaymentsForRepository(
 }
 
 // Process a single repository for payment comments in [CLOSED, OPEN] issues
-export async function processRepo(
-  org: string,
-  repo: Repositories,
-  since: string,
-  oneCsv: boolean
-) {
+export async function processRepo(org: string, repo: Repositories, since: string, oneCsv: boolean) {
   console.log(`Processing ${repo.name}...\n`);
   const allPayments: PaymentInfo[] = [];
   const allNoAssigneePayments: PaymentInfo[] = [];
@@ -483,10 +413,7 @@ export async function processRepo(
 }
 
 // Process all repositories for payment comments in [CLOSED, OPEN] issues
-export async function processRepositories(
-  org: string,
-  since: string
-): Promise<CSVData | undefined> {
+export async function processRepositories(org: string, since: string): Promise<CSVData | undefined> {
   const repos = await fetchPublicRepositories(org);
 
   const processedRepos: CSVData = {
@@ -514,9 +441,7 @@ export async function processRepositories(
       }
     }
 
-    processedRepos.allNoAssigneePayments.push(
-      ...processed.allNoAssigneePayments
-    );
+    processedRepos.allNoAssigneePayments.push(...processed.allNoAssigneePayments);
   }
 
   return processedRepos;

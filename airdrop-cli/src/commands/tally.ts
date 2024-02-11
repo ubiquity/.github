@@ -6,8 +6,7 @@ import { invoke } from "../invoke";
 
 @command({
   brief: "Tally UBQ airdrop.",
-  description:
-    "Includes all repositories with payments on dev branch since 01-01-2023.",
+  description: "Includes all repositories with payments on dev branch since 01-01-2023.",
 })
 export default class extends Command {
   @metadata
