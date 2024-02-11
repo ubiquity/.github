@@ -1,0 +1,30 @@
+{
+  "compilerOptions": {
+    "target": "es6",
+    "module": "commonjs",
+    "declaration": true,
+    "experimentalDecorators": true,
+    "emitDecoratorMetadata": true,
+    "esModuleInterop": true,
+    "strict": true,
+    "strictPropertyInitialization": false,
+    "noImplicitReturns": true,
+    "noEmitOnError": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "stripInternal": true,
+    "sourceMap": true,
+    "skipDefaultLibCheck": true,
+    "newLine": "LF",
+    "outDir": "dist",
+    "plugins": []
+  },
+  "include": [
+    "src",
+  ],
+  "resolveJsonModule": true,
+  "exclude": [
+    "node_modules",
+    "dist"
+  ]
+}

@@ -1,0 +1,43 @@
+name: Run UBQ Airdrop CLI
+
+on:
+  push:
+    branches:
+      - master
+      - main
+      - development
+
+jobs:
+  run-cli:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Install Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install Dependencies
+        run: npm install
+
+      - name: Build CLI
+        run: npm run build
+
+      - name: Execute CLI
+        run: |
+          REPO_NAME=$(echo "${{ github.repository }}" | cut -d'/' -f2)
+          npm run single ubiquibot
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload CSV Artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          name: ubq-airdrop-csv
+          path: |
+            all_repos_all_payments.csv
+            all_repos_contributors.csv
+            all_repos_no_payments.csv
