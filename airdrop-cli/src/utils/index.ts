@@ -1,12 +1,6 @@
-import { writeFile } from "fs/promises";
 import { fetchPublicRepositories } from "../invoke";
-import {
-  CSVData,
-  Contributor,
-  NoPayments,
-  PaymentInfo,
-  Repositories,
-} from "../types";
+import { CSVData, Contributor, DebugData, NoPayments, PaymentInfo, Repositories } from "../types";
+import { writeFile } from "fs";
 
 // Generates a unique key set for the repositories
 export async function genKeySet() {
@@ -22,8 +16,7 @@ export async function genKeySet() {
 
   const mutateDupes = keySet.map((set) => {
     if (keySet.filter((k) => k.key === set.key).length > 1) {
-      const split =
-        set.name.split("-")[1]?.slice(0, 6) ?? set.name?.slice(2, 8);
+      const split = set.name.split("-")[1]?.slice(0, 6) ?? set.name?.slice(2, 8);
       return {
         key: split,
         name: set.name,
@@ -38,10 +31,7 @@ export async function genKeySet() {
 
 // Removes duplicates
 export function removeDuplicates<T>(arr: T[]): T[] {
-  const unique = arr.filter(
-    (v, i, a) =>
-      a.findIndex((t) => JSON.stringify(t) === JSON.stringify(v)) === i
-  );
+  const unique = arr.filter((v, i, a) => a.findIndex((t) => JSON.stringify(t) === JSON.stringify(v)) === i);
   return unique;
 }
 
@@ -64,9 +54,7 @@ export async function loadingBar() {
 }
 
 // Converts data to CSV strings
-export async function dataToCSV(
-  json: PaymentInfo[] | NoPayments[] | Contributor
-) {
+export async function dataToCSV(json: DebugData[] | PaymentInfo[] | NoPayments[] | Contributor) {
   console.log("Converting JSON to CSV...");
   if (!json || json.length === 0) {
     return "";
@@ -78,22 +66,15 @@ export async function dataToCSV(
       if (json[0].url.includes("issue")) {
         json = removeDuplicates(json as PaymentInfo[]);
         csv = json
-          .sort((a: { repoName: string }, b: { repoName: string }) =>
-            a.repoName.localeCompare(b.repoName)
-          )
+          .sort((a: { repoName: string }, b: { repoName: string }) => a.repoName.localeCompare(b.repoName))
           .map((row) => Object.values(row).join(","))
           .join("\n");
       } else {
         json = removeDuplicates(json as NoPayments[]);
         csv = json
-          .sort(
-            (a: { lastCommitDate: string }, b: { lastCommitDate: string }) => {
-              return (
-                new Date(b.lastCommitDate).getTime() -
-                new Date(a.lastCommitDate).getTime()
-              );
-            }
-          )
+          .sort((a: { lastCommitDate: string }, b: { lastCommitDate: string }) => {
+            return new Date(b.lastCommitDate).getTime() - new Date(a.lastCommitDate).getTime();
+          })
           .map((row) => Object.values(row).join(","))
           .join("\n");
       }
@@ -122,15 +103,7 @@ export async function writeCSV(data: CSVData, title?: string) {
     },
     {
       name: "All Payments",
-      headers: [
-        "Repository",
-        "Issue #",
-        "Amount",
-        "Currency",
-        "Payee",
-        "Type",
-        "URL",
-      ],
+      headers: ["Repository", "Issue #", "Amount", "Currency", "Payee", "Type", "URL"],
       data: [...data.allPayments, ...data.allNoAssigneePayments],
     },
     {
@@ -146,19 +119,18 @@ export async function writeCSV(data: CSVData, title?: string) {
     csv += `${group.headers.join(",")}\n`;
     csv += await dataToCSV(group.data);
 
-    await writeToFile(
-      `${process.cwd()}/${title ? `${title}_` : "all_repos_"}${group.name
-        .toLowerCase()
-        .replace(" ", "_")}.csv`,
-      csv
-    );
+    await writeToFile(`${process.cwd()}/${title ? `${title}_` : "all_repos_"}${group.name.toLowerCase().replace(" ", "_")}.csv`, csv);
   }
 }
 
 // Outputs the CSVs to the root of the project
 export async function writeToFile(fileName: string, data: string) {
   try {
-    await writeFile(fileName, data);
+    writeFile(fileName, data, (err) => {
+      if (err) {
+        console.error(err);
+      }
+    });
   } catch (err) {
     console.error(err);
   }

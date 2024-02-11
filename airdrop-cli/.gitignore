@@ -9,4 +9,5 @@ node_modules
 static/dist
 .env
 dist
-.csv
+*.csv
+debug/repos
