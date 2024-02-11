@@ -3,14 +3,14 @@ import { fetchPublicRepositories, processRepo } from "../invoke";
 import { loadingBar, writeCSV } from "../utils";
 
 @command({
-  brief: "Process a single repository.",
-  description: "Tally the UBQ airdrop for a single repository.",
+  brief: "Processes all repositories and writes repo-specific CSV files.",
+  description: "Tally the UBQ airdrop for all repositories with files for each repo.",
 })
 export default class extends Command {
   @metadata
   async execute(
     @param({
-      description: "The repository name or key.",
+      description: "",
       required: false,
     })
     _: string

@@ -1,41 +1,82 @@
 {
-  "name": "ubq-airdrop-cli",
+  "name": "ts-template",
   "version": "1.0.0",
-  "description": "",
-  "author": "Keyrxng",
-  "main": "dist/index.js",
+  "description": "Template repository with TypeScript support.",
+  "main": "build/index.ts",
+  "author": "Ubiquity DAO",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20.10.0"
+  },
   "scripts": {
-    "start": "node dist/index.js",
-    "tally": "node dist/index.js tally",
-    "tally-multi-csv": "node dist/index.js tally-multi-csv",
-    "tally-from": "node dist/index.js tally-from",
-    "single": "node dist/index.js single",
-    "help": "node dist/index.js help",
-    "build": "npx tsc",
+    "start": "tsx build/esbuild-server.ts",
+    "build": "tsx build/esbuild-build.ts",
+    "format": "run-s format:lint format:prettier format:cspell",
+    "format:lint": "eslint --fix .",
+    "format:prettier": "prettier --write .",
+    "format:cspell": "cspell **/*",
+    "prepare": "husky install",
+    "cli:start": "node dist/index.js",
+    "cli:tally": "node dist/index.js tally",
+    "cli:tally-multi-csv": "node dist/index.js tally-multi-csv",
+    "cli:tally-from": "node dist/index.js tally-from",
+    "cli:single": "node dist/index.js single",
+    "cli:help": "node dist/index.js help",
+    "cli:build": "npx tsc",
     "test": "npx jest"
   },
   "keywords": [
-    "UBQ",
-    "UbiquityDAO",
-    "Airdrop",
-    "cli",
     "typescript",
-    "graphql",
-    "github"
+    "template",
+    "dao",
+    "ubiquity",
+    "open-source"
   ],
-  "license": "ISC",
-  "devDependencies": {
-    "@types/jest": "^29.5.12",
-    "@types/node": "^20.11.17",
-    "jest": "^29.7.0",
-    "ts-jest": "^29.1.2",
-    "typescript": "^5.3.3"
-  },
   "dependencies": {
     "axios": "^1.6.7",
     "clime": "^0.5.16",
-    "dotenv": "^16.4.1",
+    "dotenv": "^16.4.2",
     "graphql": "^16.8.1",
     "graphql-request": "^6.1.0"
+  },
+  "devDependencies": {
+    "@commitlint/cli": "^18.4.3",
+    "@commitlint/config-conventional": "^18.4.3",
+    "@cspell/dict-node": "^4.0.3",
+    "@cspell/dict-software-terms": "^3.3.17",
+    "@cspell/dict-typescript": "^3.1.2",
+    "@types/jest": "^29.5.12",
+    "@types/node": "^20.10.0",
+    "@typescript-eslint/eslint-plugin": "^6.13.1",
+    "@typescript-eslint/parser": "^6.13.1",
+    "cspell": "^8.3.2",
+    "esbuild": "^0.19.8",
+    "eslint": "^8.54.0",
+    "eslint-config-prettier": "^9.0.0",
+    "eslint-plugin-prettier": "^5.0.1",
+    "eslint-plugin-sonarjs": "^0.23.0",
+    "husky": "^8.0.3",
+    "jest": "^29.7.0",
+    "knip": "^3.3.0",
+    "lint-staged": "^15.1.0",
+    "npm-run-all": "^4.1.5",
+    "prettier": "^3.1.0",
+    "ts-jest": "^29.1.2",
+    "tsx": "^4.6.0",
+    "typescript": "^5.3.2"
+  },
+  "lint-staged": {
+    "*.ts": [
+      "yarn prettier --write",
+      "eslint --fix"
+    ],
+    "src/**.{ts,json}": [
+      "cspell"
+    ]
+  },
+  "commitlint": {
+    "extends": [
+      "@commitlint/config-conventional"
+    ]
   }
 }
