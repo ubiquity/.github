@@ -16,6 +16,7 @@
     "format:prettier": "prettier --write .",
     "format:cspell": "cspell **/*",
     "prepare": "husky install",
+    "cli:debug": "node dist/index.js debug",
     "cli:start": "node dist/index.js",
     "cli:tally": "node dist/index.js tally",
     "cli:tally-multi-csv": "node dist/index.js tally-multi-csv",

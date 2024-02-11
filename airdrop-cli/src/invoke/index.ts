@@ -1,7 +1,7 @@
 import * as dotenv from "dotenv";
 import { request, gql } from "graphql-request";
-import { loadingBar, writeCSV } from "../utils";
-import { Repositories, PaymentInfo, NoPayments, Contributor, CSVData } from "../types";
+import { dataToCSV, loadingBar, removeDuplicates, writeCSV, writeToFile } from "../utils";
+import { Repositories, PaymentInfo, NoPayments, Contributor, CSVData, DebugData } from "../types";
 
 dotenv.config();
 
@@ -95,11 +95,12 @@ export async function fetchPaymentsForRepository(
   org: string,
   repoName: string,
   since: string
-): Promise<{ payments: PaymentInfo[]; noAssigneePayments: PaymentInfo[] }> {
+): Promise<{ payments: PaymentInfo[]; noAssigneePayments: PaymentInfo[]; debugData: DebugData[] }> {
   let hasNextPage = true;
   let cursor = null;
   const payments = new Set<PaymentInfo>();
   const noAssigneePayments = new Set<PaymentInfo>();
+  const debugData: DebugData[] = [];
 
   const query = gql`
     query ($org: String!, $repoName: String!, $cursor: String, $since: DateTime) {
@@ -172,8 +173,9 @@ export async function fetchPaymentsForRepository(
         const match = body.match(/.*\[ CLAIM (\d+(\.\d+)?) (XDAI|DAI|WXDAI) \]/);
 
         // Match: [ **[ 12.5 DAI ]] typically the newer <details> type awards
-        const altMatch = body.match(/.*\[ \[ \*?(\d+(\.\d+)?) \*?(XDAI|DAI|WXDAI)\*? \]\]/);
+        const altMatch = body.match(/.*?\[ \[ *?(\d+(\.\d+)?) *?(XDAI|DAI|WXDAI) *?\]\]/);
 
+        const permitMatch = body.match(/\(https:\/\/pay\.ubq\.fi\?claim=([^)]*)\)/);
         /**
          * Most of the time the awards are in the format:
          * Assignee >>: ### [ **[ CLAIM 25 WXDAI ],25,,WXDAI
@@ -183,7 +185,7 @@ export async function fetchPaymentsForRepository(
          */
 
         // we catch all payment comments here then filter them out
-        if (match) {
+        if (match && comment.node.author?.login === "ubiquibot") {
           const rematch = body.match(/CLAIM (\d+(\.\d+)?) (XDAI|DAI|WXDAI)/);
           const creator = body.includes("Task Creator Reward") ? true : false;
           const conversation = body.includes("Conversation Reward") ? true : false;
@@ -209,6 +211,20 @@ export async function fetchPaymentsForRepository(
               user = user.split("###")[1];
             }
 
+            debugData.push({
+              repoName,
+              issueNumber,
+              paymentAmount: parseFloat(rematch[1]),
+              currency: rematch[3],
+              payee: user,
+              type,
+              url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
+              comment: body,
+              permit: permitMatch ? permitMatch[1] : "No permit found",
+              issueCreator,
+              typeOfMatch: "match-colon-match-claim-bot-author",
+            });
+
             payments.add({
               repoName,
               issueNumber,
@@ -230,6 +246,8 @@ export async function fetchPaymentsForRepository(
                 url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
               });
             }
+
+            continue;
           } else {
             // if we are here then it is the assignee's award
 
@@ -244,6 +262,20 @@ export async function fetchPaymentsForRepository(
                 url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
               });
 
+              debugData.push({
+                repoName,
+                issueNumber,
+                paymentAmount: parseFloat(rematch[1]),
+                currency: rematch[3],
+                payee: issueAssignee,
+                type,
+                url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
+                comment: body,
+                permit: permitMatch ? permitMatch[1] : "No permit found",
+                issueCreator,
+                typeOfMatch: "rematch-bot-author",
+              });
+
               if (issueAssignee === "No assignee") {
                 noAssigneePayments.add({
                   repoName,
@@ -255,7 +287,36 @@ export async function fetchPaymentsForRepository(
                   url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
                 });
               }
+              continue;
+            } else {
+              debugData.push({
+                repoName,
+                issueNumber,
+                paymentAmount: parseFloat(rematch[1]),
+                currency: rematch[3],
+                payee: issueAssignee,
+                type,
+                url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
+                comment: body,
+                permit: permitMatch ? permitMatch[1] : "No permit found",
+                issueCreator,
+                typeOfMatch: "no-colon-claim-match-no-rematch-bot-author",
+              });
             }
+
+            debugData.push({
+              repoName,
+              issueNumber,
+              paymentAmount: parseFloat(rematch[1]),
+              currency: rematch[3],
+              payee: issueAssignee,
+              type,
+              url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
+              comment: body,
+              permit: permitMatch ? permitMatch[1] : "No permit found",
+              issueCreator,
+              typeOfMatch: "no-colon-no-rematch-match-bot-author",
+            });
           }
           continue;
         }
@@ -266,6 +327,11 @@ export async function fetchPaymentsForRepository(
 
           // multiple payouts so pulling them both out
           const payouts = altMatch.input.match(/\*?(\d+(\.\d+)?) \*?(XDAI|DAI|WXDAI)\*?/g);
+
+          console.log(`Found altmatch in ${repoName}#${issueNumber}`);
+          console.log(`users: `, users);
+          console.log(`payouts: `, payouts);
+          console.log(`===================`);
 
           for (const user of users) {
             let usr = user.split("@")[1];
@@ -282,6 +348,20 @@ export async function fetchPaymentsForRepository(
               payee: usr,
               type,
               url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
+            });
+
+            debugData.push({
+              repoName,
+              issueNumber,
+              paymentAmount: parseFloat(payouts[users.indexOf(user)].split(" ")[0]),
+              currency: payouts[users.indexOf(user)].split(" ")[1],
+              payee: usr,
+              type,
+              url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
+              comment: body,
+              permit: permitMatch ? permitMatch[1] : "No permit found",
+              issueCreator,
+              typeOfMatch: "altMatch-bot-author",
             });
 
             if (usr === "No assignee") {
@@ -302,6 +382,21 @@ export async function fetchPaymentsForRepository(
         if (match) {
           // haven't hit this yet but here for debugging
           console.log(`still matching: `, match);
+          debugData.push({
+            repoName,
+            issueNumber,
+            paymentAmount: parseFloat(match[1]),
+            currency: match[3],
+            payee: issueAssignee,
+            type: "assignee",
+            url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
+            comment: body,
+            permit: permitMatch ? permitMatch[1] : "No permit found",
+            issueCreator,
+            typeOfMatch: "match-no-bot-author",
+          });
+
+          continue;
         }
 
         if (altMatch) {
@@ -330,6 +425,20 @@ export async function fetchPaymentsForRepository(
               url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
             });
 
+            debugData.push({
+              repoName,
+              issueNumber,
+              paymentAmount: parseFloat(payouts[users.indexOf(user)].split(" ")[0]),
+              currency: payouts[users.indexOf(user)].split(" ")[1],
+              payee: usr,
+              type,
+              url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
+              comment: body,
+              permit: permitMatch ? permitMatch[1] : "No permit found",
+              issueCreator,
+              typeOfMatch: "altMatch-no-bot-author",
+            });
+
             if (usr === "No assignee") {
               noAssigneePayments.add({
                 repoName,
@@ -354,6 +463,7 @@ export async function fetchPaymentsForRepository(
   const data = {
     payments: Array.from(payments),
     noAssigneePayments: Array.from(noAssigneePayments),
+    debugData,
   };
 
   return data;
@@ -367,6 +477,16 @@ export async function processRepo(org: string, repo: Repositories, since: string
   const noPayments: NoPayments[] = [];
   const contributors: Contributor = {};
   const payments = await fetchPaymentsForRepository(org, repo.name, since);
+
+  if (payments.debugData.length > 0) {
+    const sorted = payments.debugData.sort((a, b) => b.paymentAmount - a.paymentAmount);
+    const deduped = removeDuplicates(sorted);
+    const csvdata = await dataToCSV(deduped);
+
+    writeToFile(`./debug/repos/${repo.name}.json`, JSON.stringify(payments.debugData, null, 2));
+
+    writeToFile(`./debug/repos/${repo.name}.csv`, csvdata);
+  }
 
   if (payments.payments.length === 0) {
     noPayments.push({

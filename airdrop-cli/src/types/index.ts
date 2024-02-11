@@ -32,3 +32,10 @@ export interface CSVData {
   allNoAssigneePayments: PaymentInfo[];
   noPayments: NoPayments[];
 }
+
+export interface DebugData extends PaymentInfo {
+  comment: string;
+  permit: string;
+  issueCreator: string;
+  typeOfMatch: string;
+}
