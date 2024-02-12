@@ -8,22 +8,17 @@ export async function parseDebugData() {
 
   const files = fs.readdirSync(folderPath);
 
-  const typesOfMatch = [
-    "match-colon-match-claim-bot-author",
-    "rematch-bot-author",
-    "no-colon-claim-match-no-rematch-bot-author",
-    "no-colon-no-rematch-match-bot-author",
-    "altMatch-bot-author",
-    "match-no-bot-author",
-    "altMatch-no-bot-author",
-  ];
+  const typesOfMatch = ["permit-has-newline", "more-payments-than-users", "no-permit-but-match-found", "no-match-but-permit-found"];
 
   files.forEach((file: string) => {
     const filePath = `${folderPath}/${file}`;
     if (file.endsWith(".json")) {
       const fileContent = fs.readFileSync(filePath, "utf8");
 
-      const data: DebugData[] = file.endsWith(".json") ? JSON.parse(fileContent) : {};
+      const data: DebugData[] = JSON.parse(fileContent) as DebugData[];
+      if (!data.length) return console.log(`No data found in ${file}`);
+
+      console.log(`Parsing ${file}`);
 
       data.forEach((entry) => {
         const typeOfMatch = entry.typeOfMatch;
@@ -61,3 +56,9 @@ export async function debugCSVByTypeOfMatch(data: { [key: string]: DebugData[] }
     await writeToFile(`./debug/${key}.csv`, csv);
   }
 }
+
+// export async function validateNonPayments(data: DebugData[]) {
+//   const result: DebugData[] = [];
+
+//   return result;
+// }

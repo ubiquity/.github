@@ -1,5 +1,5 @@
 import { fetchPublicRepositories } from "../invoke";
-import { CSVData, Contributor, DebugData, NoPayments, PaymentInfo, Repositories } from "../types";
+import { CSVData, Contributor, DebugData, NoPayments, PaymentInfo, Permits, Repositories } from "../types";
 import { writeFile } from "fs";
 
 // Generates a unique key set for the repositories
@@ -54,7 +54,7 @@ export async function loadingBar() {
 }
 
 // Converts data to CSV strings
-export async function dataToCSV(json: DebugData[] | PaymentInfo[] | NoPayments[] | Contributor) {
+export async function dataToCSV(json: DebugData[] | PaymentInfo[] | NoPayments[] | Permits[] | Contributor) {
   console.log("Converting JSON to CSV...");
   if (!json || json.length === 0) {
     return "";
@@ -110,6 +110,11 @@ export async function writeCSV(data: CSVData, title?: string) {
       name: "No Payments",
       headers: ["Repository", "Archived", "Last Commit", "Message", "URL"],
       data: data.noPayments,
+    },
+    {
+      name: "Permits",
+      headers: ["Repository", "Issue #", "Permit"],
+      data: data.permits,
     },
   ];
 

@@ -31,6 +31,7 @@ export interface CSVData {
   allPayments: PaymentInfo[];
   allNoAssigneePayments: PaymentInfo[];
   noPayments: NoPayments[];
+  permits: Permits[];
 }
 
 export interface DebugData extends PaymentInfo {
@@ -38,4 +39,10 @@ export interface DebugData extends PaymentInfo {
   permit: string;
   issueCreator: string;
   typeOfMatch: string;
+}
+
+export interface Permits {
+  repoName: string;
+  issueNumber: number;
+  url: string;
 }
