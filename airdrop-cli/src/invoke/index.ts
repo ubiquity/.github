@@ -2,6 +2,7 @@ import * as dotenv from "dotenv";
 import { request, gql } from "graphql-request";
 import { dataToCSV, loadingBar, removeDuplicates, writeCSV, writeToFile } from "../utils";
 import { Repositories, PaymentInfo, NoPayments, Contributor, CSVData, DebugData, Permits } from "../types";
+import { crossReferencePermitsWithPayments, decodePermits } from "../utils/debug";
 
 dotenv.config();
 
@@ -37,6 +38,9 @@ export async function invoke(timeFrom?: string) {
       ) === i
   );
   data.allPayments = deduped;
+
+  await decodePermits(data.permits);
+  await crossReferencePermitsWithPayments(data.permits, data.allPayments);
 
   await writeCSV(data);
 
@@ -196,30 +200,11 @@ export async function fetchPaymentsForRepository(
 
             if (permitCount.length > 1) {
               for (const permit of permitCount) {
-                // if theres a newline then extraction may have failed
-                const match = permit.match(/\n/g);
-
-                if (match) {
-                  debugData.push({
-                    repoName,
-                    issueNumber,
-                    paymentAmount: 0,
-                    currency: "DEBUG",
-                    payee: "DEBUG",
-                    type,
-                    url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
-                    comment: body,
-                    permit: JSON.stringify(permitCount),
-                    issueCreator,
-                    typeOfMatch: "permit-has-newline",
-                  });
-                } else {
-                  permits.push({
-                    repoName,
-                    issueNumber,
-                    url: permit,
-                  });
-                }
+                permits.push({
+                  repoName,
+                  issueNumber,
+                  url: permit,
+                });
               }
 
               const users = Array.from(new Set<string>(body.match(/@\w+/g)));

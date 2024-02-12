@@ -1,5 +1,5 @@
 import { fetchPublicRepositories } from "../invoke";
-import { CSVData, Contributor, DebugData, NoPayments, PaymentInfo, Permits, Repositories } from "../types";
+import { CSVData, Contributor, DebugData, NoPayments, PaymentInfo, PermitDetails, Permits, Repositories } from "../types";
 import { writeFile } from "fs";
 
 // Generates a unique key set for the repositories
@@ -88,6 +88,22 @@ export async function dataToCSV(json: DebugData[] | PaymentInfo[] | NoPayments[]
         .map((row) => row.join(","))
         .join("\n");
     }
+  } catch (err) {
+    console.log(err);
+  }
+
+  return csv;
+}
+
+export async function permitsToCSV(json: PermitDetails[]) {
+  if (!json || json.length === 0) {
+    return "";
+  }
+  let csv = "";
+
+  try {
+    json = removeDuplicates(json as PermitDetails[]);
+    csv = json.map((row) => Object.values(row).join(",")).join("\n");
   } catch (err) {
     console.log(err);
   }
