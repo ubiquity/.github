@@ -29,6 +29,10 @@ export async function genKeySet() {
   return mutateDupes;
 }
 
+export function findDupes<T>(arr: T[]): T[] {
+  return arr.filter((item, index) => arr.indexOf(item) !== index);
+}
+
 // Removes duplicates
 export function removeDuplicates<T>(arr: T[]): T[] {
   const unique = arr.filter((v, i, a) => a.findIndex((t) => JSON.stringify(t) === JSON.stringify(v)) === i);
@@ -55,7 +59,6 @@ export async function loadingBar() {
 
 // Converts data to CSV strings
 export async function dataToCSV(json: DebugData[] | PaymentInfo[] | NoPayments[] | Permits[] | Contributor) {
-  console.log("Converting JSON to CSV...");
   if (!json || json.length === 0) {
     return "";
   }

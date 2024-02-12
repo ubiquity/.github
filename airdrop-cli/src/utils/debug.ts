@@ -56,9 +56,3 @@ export async function debugCSVByTypeOfMatch(data: { [key: string]: DebugData[] }
     await writeToFile(`./debug/${key}.csv`, csv);
   }
 }
-
-// export async function validateNonPayments(data: DebugData[]) {
-//   const result: DebugData[] = [];
-
-//   return result;
-// }
