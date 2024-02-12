@@ -10,4 +10,4 @@ static/dist
 .env
 dist
 *.csv
-debug/repos
+debug/repos/*
