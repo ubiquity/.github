@@ -19,6 +19,25 @@ export async function invoke(timeFrom?: string) {
     throw new Error("No data found processing all repositories.");
   }
 
+  /**
+   * it's very unlikely that a user has two payments for the exact same amount
+   * on the same issue: creator earns less than assignee, and convo rewards shouldn't
+   * be more than assignee rewards. It's possible I guess but very unlikely.
+   */
+
+  const deduped = data.allPayments.filter(
+    (v, i, a) =>
+      a.findIndex(
+        (t) =>
+          t.repoName === v.repoName &&
+          t.issueNumber === v.issueNumber &&
+          t.paymentAmount === v.paymentAmount &&
+          t.currency === v.currency &&
+          t.payee === v.payee
+      ) === i
+  );
+  data.allPayments = deduped;
+
   await writeCSV(data);
 
   clearInterval(loader);
@@ -165,14 +184,6 @@ export async function fetchPaymentsForRepository(
         const conversation = body.includes("Conversation Rewards") ? true : false;
         const type = creator ? "creator" : conversation ? "conversation" : "assignee";
 
-        /**
-         * Most of the time the awards are in the format:
-         * Assignee >>: ### [ **[ CLAIM 25 WXDAI ],25,,WXDAI
-         * Convo|Creator >>: ### [ **gitcoindev: [ CLAIM 18.6 WXDAI ],18.6,.6,WXDAI
-         * Assignee >>: ### [ **[ CLAIM 25 WXDAI ],25,,WXDAI
-         * Convo|Creator >>: ### [ **rndquu: [ CLAIM 23.4 WXDAI ],23.4,.4,WXDAI
-         */
-
         let user = "DEBUG";
 
         if (comment.node.author?.login === "ubiquibot") {
@@ -181,19 +192,9 @@ export async function fetchPaymentsForRepository(
 
           if (containsPermit !== "No permit found") {
             // this is catching cases as seen in https://github.com/ubiquity/nft-rewards/issues/2
-            // https://pay.ubq.fi?claim= & https://pay.ubq.fi?claim=
             const permitCount = Array.from(new Set<string>(body.match(/https:\/\/pay\.ubq\.fi\/?\?claim=[^\s]*/g)));
 
             if (permitCount.length > 1) {
-              /**
-               * this is the newer <details> type awards edge case
-               *
-               * ### [ [ 1.7 WXDAI ]]
-               * ###### @pavlovcik
-               * ### [ [ 47.6 WXDAI ]]
-               * ###### @rndquu
-               */
-
               for (const permit of permitCount) {
                 // if theres a newline then extraction may have failed
                 const match = permit.match(/\n/g);
@@ -203,8 +204,8 @@ export async function fetchPaymentsForRepository(
                     repoName,
                     issueNumber,
                     paymentAmount: 0,
-                    currency: "xxx",
-                    payee: "xxx",
+                    currency: "DEBUG",
+                    payee: "DEBUG",
                     type,
                     url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
                     comment: body,
@@ -224,41 +225,39 @@ export async function fetchPaymentsForRepository(
               const users = Array.from(new Set<string>(body.match(/@\w+/g)));
               const payouts = body.match(/\*?(\d+(\.\d+)?) \*?(XDAI|DAI|WXDAI)\*?/g);
 
+              // These two loops cover all the cases we need to handle
+
               if (payouts.length > users.length) {
                 const usernameReg = /\[ \*\*([^:]+):/g;
 
                 const usernames = body.match(usernameReg).map((user: string) => user.split("**")[1].split(":")[0]);
 
-                console.log("more payments than users", payouts, usernames);
                 for (const user of usernames) {
                   let type = user === issueAssignee ? "assignee" : user === issueCreator ? "creator" : "conversation";
-
-                  console.log(`
-                  ${user} should be paid ${payouts[usernames.indexOf(user)]} in ${repoName} #${issueNumber}
-                  `);
 
                   const payment = {
                     repoName,
                     issueNumber,
                     paymentAmount: parseFloat(payouts[usernames.indexOf(user)]?.split(" ")[0] ?? "0") ?? 0,
-                    currency: payouts[usernames.indexOf(user)]?.split(" ")[1] ?? "yyy",
+                    currency: payouts[usernames.indexOf(user)]?.split(" ")[1] ?? "DEBUG",
                     payee: user,
                     type: type,
                     url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
                   };
+
                   payments.add(payment);
 
                   if (user === "No assignee") {
                     noAssigneePayments.add(payment);
                   }
 
-                  if (payment.currency === "yyy") {
+                  if (payment.currency === "DEBUG") {
                     debugData.push({
                       repoName,
                       issueNumber,
                       paymentAmount: 0,
-                      currency: "xxx",
-                      payee: "xxx",
+                      currency: "DEBUG",
+                      payee: "DEBUG",
                       type,
                       url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
                       comment: body,
@@ -268,20 +267,16 @@ export async function fetchPaymentsForRepository(
                     });
                   }
                 }
-                console.log(`https://github.com/${org}/${repoName}/issues/${issueNumber}`);
-                console.log(`============================`);
               }
 
               for (const user of users) {
                 let usr = user.split("@")[1];
 
-                console.log(`USER found in ${repoName} #${issueNumber}: \n`, usr);
-
                 const payment = {
                   repoName,
                   issueNumber,
                   paymentAmount: parseFloat(payouts[users.indexOf(user)]?.split(" ")[0] ?? "0") ?? 0,
-                  currency: payouts[users.indexOf(user)]?.split(" ")[1] ?? "yyy",
+                  currency: payouts[users.indexOf(user)]?.split(" ")[1] ?? "DEBUG",
                   payee: usr,
                   type: usr === issueAssignee ? "assignee" : usr === issueCreator ? "creator" : "conversation",
                   url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
@@ -293,23 +288,25 @@ export async function fetchPaymentsForRepository(
                   noAssigneePayments.add(payment);
                 }
               }
-
-              continue;
             }
 
-            // check the match for a '\n' and if there is one then add to debug
+            if (permitCount.length === 1) {
+              const permit = permitCount[0];
+
+              permits.push({
+                repoName,
+                issueNumber,
+                url: permit,
+              });
+            }
           } else {
             if (match || altMatch || rematch) {
-              console.log("match", match);
-              console.log("altMatch", altMatch);
-              console.log("rematch", rematch);
-
               debugData.push({
                 repoName,
                 issueNumber,
                 paymentAmount: 0,
-                currency: "xxx",
-                payee: "xxx",
+                currency: "DEBUG",
+                payee: "DEBUG",
                 type,
                 url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
                 comment: body,
@@ -374,21 +371,13 @@ export async function fetchPaymentsForRepository(
             }
           } else if (altMatch) {
             // Match: ... [ [ 123.45 WXDAI ] ] ..."
-
-            console.log(`altMatch award found in ${repoName} #${issueNumber}: \n`, altMatch);
-
             // this is the newer <details> type awards
+
+            console.log(`alt match found in ${repoName} #${issueNumber}: \n`, altMatch);
+
             const users = altMatch.input.match(/###### @\w+/g).map((user: string) => user.split(" ")[1]);
 
-            // multiple payouts so pulling them both out
             const payouts = altMatch.input.match(/\*?(\d+(\.\d+)?) \*?(XDAI|DAI|WXDAI)\*?/g);
-
-            /**
-            ### [ [ 1.7 WXDAI ]]
-            ###### @pavlovcik
-            ### [ [ 47.6 WXDAI ]]
-            ###### @rndquu
-            */
 
             for (const user of users) {
               let usr = user.split("@")[1];
@@ -428,16 +417,16 @@ export async function fetchPaymentsForRepository(
               noAssigneePayments.add(payment);
             }
           } else if (containsPermit !== "No permit found") {
-            // https://pay.ubq.fi?claim=https://pay.ubq.fi?claim=
             const reg = /https:\/\/pay\.ubq\.fi\?claim=([^)]*)/g;
             const permit = body.match(reg);
+
             if (permit) {
               debugData.push({
                 repoName,
                 issueNumber,
                 paymentAmount: 0,
-                currency: "xxx",
-                payee: "xxx",
+                currency: "DEBUG",
+                payee: "DEBUG",
                 type,
                 url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
                 comment: body,
@@ -497,6 +486,7 @@ export async function processRepo(org: string, repo: Repositories, since: string
 
   if (payments.permits.length > 0) {
     const deduped = removeDuplicates(payments.permits);
+
     writeToFile(`./debug/repos/${repo.name}-permits.json`, JSON.stringify(deduped, null, 2));
   }
 
