@@ -1,4 +1,3 @@
-import { parseUnits } from "viem";
 import { dataToCSV, writeToFile } from ".";
 import { DebugData, PaymentInfo, PermitDetails, Permits } from "../types";
 import fs from "fs";
@@ -9,7 +8,13 @@ export async function parseDebugData() {
 
   const files = fs.readdirSync(folderPath);
 
-  const typesOfMatch = ["permit-has-newline", "more-payments-than-users", "no-permit-but-match-found", "no-match-but-permit-found"];
+  const typesOfMatch = [
+    "no-match-but-permit-found",
+    "single-permit-user-debug",
+    "single-permit-zero-payment",
+    "multi-permit-user-debug",
+    "multi-permit-zero-payment",
+  ];
 
   files.forEach((file: string) => {
     const filePath = `${folderPath}/${file}`;
@@ -62,17 +67,23 @@ export async function decodePermits(data: Permits[]) {
   const permits = data.map((perm) => perm.url);
 
   const decoded: PermitDetails[] = [];
-  const errors: any[] = [];
+  const failed: string[] = [];
 
   for (const permit of permits) {
     try {
-      let worked = permit.split("=")[1].split("&")[0].replace(/"/g, "");
-      let d = atob(worked);
+      const worked = permit.split("=")[1].split("&")[0].replace(/"/g, "");
+      const d = atob(worked);
       const data = JSON.parse(d);
       decoded.push(data);
     } catch (err) {
-      errors.push(err);
+      failed.push(permit);
     }
+  }
+
+  if (failed.length) {
+    console.log(`Failed to decode ${failed.length} permits`);
+
+    await writeToFile("./debug/repos/failed-permits.json", JSON.stringify(failed, null, 2));
   }
 
   const output = await permitsToCSV(decoded);
@@ -105,61 +116,80 @@ export async function permitsToCSV(decodedPermits: PermitDetails[]) {
     }
   });
 
-  const csvContent = header + rows.join("\n");
-  return csvContent;
+  return header + rows.join("\n");
 }
-const tokens = [
-  {
-    name: "WXDAI",
-    address: "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d",
-  },
-  {
-    name: "DAI",
-    address: "0x44fA8E6f47987339850636F88629646662444217",
-  },
-];
 
+// function parsePermit(permit: PermitDetails | [PermitDetails]): PermitDetails {
+//   if (Array.isArray(permit)) {
+//     return permit[0];
+//   } else {
+//     return permit;
+//   }
+// }
+
+// 16/15 complexity
+// eslint-disable-next-line sonarjs/cognitive-complexity
 export async function crossReferencePermitsWithPayments(permits: Permits[], payments: PaymentInfo[]) {
   console.log(`Cross referencing permits with payments...`);
-
   const decodedPermits = await decodePermits(permits);
-  const parsePermit = (permit: PermitDetails | [PermitDetails]): PermitDetails => {
-    if (Array.isArray(permit)) {
-      return permit[0];
-    } else {
-      return permit;
-    }
-  };
+  // const matchedPayments: PaymentInfo[] = [];
+  // const unmatchedPayments: PaymentInfo[] = [];
+  // const errors: unknown[] = [];
 
-  const matchedPayments: PaymentInfo[] = [];
-  const errors: any[] = [];
+  console.log(`Decoded ${decodedPermits.length} permits`);
+  console.log(`Found ${payments.length} payments`);
 
-  for (const permit of decodedPermits) {
-    const parsedPermit = parsePermit(permit);
-    const token = parsedPermit.permit.permitted.token;
+  // const tokens = [
+  //   {
+  //     name: "WXDAI",
+  //     address: "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d",
+  //   },
+  //   {
+  //     name: "DAI",
+  //     address: "0x44fA8E6f47987339850636F88629646662444217",
+  //   },
+  // ];
 
-    for (const payment of payments) {
-      if (!payment) continue;
+  // for (const permit of decodedPermits) {
+  //   const parsedPermit = parsePermit(permit);
+  //   const token = parsedPermit.permit.permitted.token;
 
-      const currency = tokens.find((t) => t.address === token)?.name ?? "XDAI";
+  //   for (const payment of payments) {
+  //     if (!payment) continue;
 
-      try {
-        if (parseUnits(payment.paymentAmount.toString(), 18) === BigInt(parsedPermit.permit.permitted.amount) && payment.currency === currency) {
-          matchedPayments.push(payment);
-        }
-      } catch (err) {
-        errors.push(err);
-      }
-    }
-  }
+  //     const currency = tokens.find((t) => t.address === token)?.name ?? "XDAI";
+  //     const paymentAmount = parseUnits(payment.paymentAmount.toString(), 18);
+  //     const permitAmount = BigInt(parsedPermit.permit.permitted.amount);
 
-  const unmatchedPayments = payments.filter((payment) => !matchedPayments.includes(payment));
+  //     try {
+  //       if (paymentAmount === permitAmount && payment.currency === currency) {
+  //         matchedPayments.push(payment);
+  //       } else {
+  //         unmatchedPayments.push(payment);
+  //       }
+  //     } catch (err) {
+  //       errors.push(err);
+  //     }
+  //   }
+  // }
 
-  if (unmatchedPayments.length > 0) {
-    writeToFile(`./debug/repos/unmatched-payments.json`, JSON.stringify(unmatchedPayments, null, 2));
-  }
+  // await processUnmatched(matchedPayments, unmatchedPayments);
 
-  if (errors.length) {
-    console.log(`matching errors: `, errors);
-  }
+  // if (errors.length) {
+  //   console.log(`matching errors: `, errors);
+  // }
 }
+
+// async function processUnmatched(matchedPayments: PaymentInfo[], unmatchedPayments: PaymentInfo[]) {
+//   unmatchedPayments.filter((payment) => !matchedPayments.includes(payment));
+
+//   removeDuplicates(matchedPayments);
+//   removeDuplicates(unmatchedPayments);
+
+//   if (unmatchedPayments.length) {
+//     console.log(`Matched payments: `, matchedPayments.length);
+//     console.log(`Unmatched payments: `, unmatchedPayments.length);
+//     await writeToFile(`./debug/repos/matched-payments.json`, JSON.stringify(matchedPayments, null, 2));
+//     await writeToFile(`./debug/repos/unmatched-payments.json`, JSON.stringify(unmatchedPayments, null, 2));
+//   }
+// }
