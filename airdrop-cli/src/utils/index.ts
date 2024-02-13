@@ -1,4 +1,4 @@
-import { fetchPublicRepositories } from "../invoke";
+import { fetchPublicRepositories } from "../invoke/invoke";
 import { CSVData, Contributor, DebugData, NoPayments, PaymentInfo, PermitDetails, Permits, Repositories } from "../types";
 import { writeFile } from "fs";
 
@@ -14,7 +14,7 @@ export async function genKeySet() {
     };
   });
 
-  const mutateDupes = keySet.map((set) => {
+  return keySet.map((set) => {
     if (keySet.filter((k) => k.key === set.key).length > 1) {
       const split = set.name.split("-")[1]?.slice(0, 6) ?? set.name?.slice(2, 8);
       return {
@@ -25,8 +25,6 @@ export async function genKeySet() {
     }
     return set;
   });
-
-  return mutateDupes;
 }
 
 export function findDupes<T>(arr: T[]): T[] {
@@ -35,8 +33,7 @@ export function findDupes<T>(arr: T[]): T[] {
 
 // Removes duplicates
 export function removeDuplicates<T>(arr: T[]): T[] {
-  const unique = arr.filter((v, i, a) => a.findIndex((t) => JSON.stringify(t) === JSON.stringify(v)) === i);
-  return unique;
+  return arr.filter((v, i, a) => a.findIndex((t) => JSON.stringify(t) === JSON.stringify(v)) === i);
 }
 
 // Removes duplicate contributors and sums their balances
@@ -114,6 +111,11 @@ export async function permitsToCSV(json: PermitDetails[]) {
 // Outputs the results from `tally` and `tally-from` to three CSV files
 export async function writeCSV(data: CSVData, title?: string) {
   console.log("Writing CSVs...");
+
+  console.log(
+    `Lengths:\n contributor = ${Object.keys(data.contributors).length}\n allPayments = ${data.allPayments.length}\n noPayments = ${data.noPayments.length}\n permits = ${data.permits.length}\n`
+  );
+
   const groups = [
     {
       name: "Contributors",
@@ -141,9 +143,10 @@ export async function writeCSV(data: CSVData, title?: string) {
     console.log(`Writing ${group.name}...`);
     let csv = "";
     csv += `${group.headers.join(",")}\n`;
+    const fileName = `${process.cwd()}/${title ? title + "_" : "all_repos_"}${group.name.toLowerCase().replace(" ", "_")}.csv`;
     csv += await dataToCSV(group.data);
 
-    await writeToFile(`${process.cwd()}/${title ? `${title}_` : "all_repos_"}${group.name.toLowerCase().replace(" ", "_")}.csv`, csv);
+    await writeToFile(fileName, csv);
   }
 }
 

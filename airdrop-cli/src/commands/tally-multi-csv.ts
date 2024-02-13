@@ -1,5 +1,5 @@
-import { Command, command, metadata, param } from "clime";
-import { fetchPublicRepositories, processRepo } from "../invoke";
+import { Command, command, metadata } from "clime";
+import { fetchPublicRepositories, processRepo } from "../invoke/invoke";
 import { loadingBar, writeCSV } from "../utils";
 
 @command({
@@ -8,13 +8,7 @@ import { loadingBar, writeCSV } from "../utils";
 })
 export default class extends Command {
   @metadata
-  async execute(
-    @param({
-      description: "",
-      required: false,
-    })
-    _: string
-  ) {
+  async execute() {
     const repos = await fetchPublicRepositories();
 
     const since = "2023-01-01T00:00:00.000Z";

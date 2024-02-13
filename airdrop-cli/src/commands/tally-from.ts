@@ -1,5 +1,5 @@
 import { Command, command, metadata, param } from "clime";
-import { invoke } from "../invoke";
+import { invoke } from "../invoke/invoke";
 
 @command({
   brief: "Tally UBQ airdrop from YYYY-MM-DD.",

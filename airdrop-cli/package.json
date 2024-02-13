@@ -24,6 +24,7 @@
     "cli:single": "node dist/index.js single",
     "cli:help": "node dist/index.js help",
     "cli:build": "npx tsc",
+    "cli:tsx": "yarn tsx src/invoke/index.ts",
     "test": "npx jest"
   },
   "keywords": [
@@ -64,6 +65,7 @@
     "npm-run-all": "^4.1.5",
     "prettier": "^3.1.0",
     "ts-jest": "^29.1.2",
+    "tsc": "^2.0.4",
     "tsx": "^4.6.0",
     "typescript": "^5.3.2"
   },
@@ -80,6 +82,5 @@
     "extends": [
       "@commitlint/config-conventional"
     ]
-  },
-  "packageManager": "yarn@4.1.0"
+  }
 }

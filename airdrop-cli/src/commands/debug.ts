@@ -1,4 +1,4 @@
-import { Command, command, metadata, param } from "clime";
+import { Command, command, metadata } from "clime";
 import { loadingBar } from "../utils";
 import { parseDebugData } from "../utils/debug";
 
@@ -8,13 +8,7 @@ import { parseDebugData } from "../utils/debug";
 })
 export default class extends Command {
   @metadata
-  async execute(
-    @param({
-      description: "",
-      required: false,
-    })
-    _: string
-  ) {
+  async execute() {
     const loader = await loadingBar();
 
     await parseDebugData();
