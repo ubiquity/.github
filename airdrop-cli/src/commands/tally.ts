@@ -18,5 +18,6 @@ export default class extends Command {
   @metadata
   async execute() {
     await invoke();
+    return true;
   }
 }

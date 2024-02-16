@@ -15,7 +15,7 @@ export interface Repositories {
 }
 
 export interface Contributor {
-  [username: string]: number;
+  [address: string]: number;
 }
 
 export interface NoPayments {
