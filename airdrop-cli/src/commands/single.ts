@@ -17,13 +17,13 @@ export default class extends Command {
     const keySet = await genKeySet();
 
     const filtered = keySet.filter((k) => k.key === key || k.name === key);
-    const since = "2023-01-01T00:00:00.000Z";
     const loader = await loadingBar();
 
     for (const key of filtered) {
-      await processRepo("Ubiquity", key.repo, since, false);
+      await processRepo("Ubiquity", key.repo, false);
     }
 
     clearInterval(loader);
+    return true;
   }
 }

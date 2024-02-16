@@ -1,5 +1,6 @@
+import { formatUnits } from "viem";
 import { dataToCSV, writeToFile } from ".";
-import { DebugData, PaymentInfo, PermitDetails, Permits } from "../types";
+import { Contributor, DebugData, PermitDetails, Permits } from "../types";
 import fs from "fs";
 
 export async function parseDebugData() {
@@ -64,132 +65,170 @@ export async function debugCSVByTypeOfMatch(data: { [key: string]: DebugData[] }
 }
 
 export async function decodePermits(data: Permits[]) {
-  const permits = data.map((perm) => perm.url);
+  const permits = Array.from(new Set(data.map((perm) => perm.url)));
 
-  const decoded: PermitDetails[] = [];
+  let decoded: PermitDetails[] = [];
   const failed: string[] = [];
 
   for (const permit of permits) {
     try {
-      const worked = permit.split("=")[1].split("&")[0].replace(/"/g, "");
+      let worked = permit.split("=")[1].split("&")[0].replace(/"/g, "");
+      // 37 permits failed to decode, below are the reasons why
+
+      if (worked.includes('%3D&network=100"')) {
+        worked = worked.split('%3D&network=100"')[0];
+      }
+      if (worked.includes('\\">')) {
+        worked = worked.split('\\">')[0];
+      }
+      if (worked.includes('%3D"')) {
+        worked = worked.split('%3D"')[0];
+      }
+
+      if (worked.includes("%3D%3D")) {
+        worked = worked.split("%3D%3D")[0];
+      }
+      if (worked.includes("%3D&")) {
+        worked = worked.split("%3D&")[0];
+      }
+      if (worked.includes("&network")) {
+        worked = worked.split("&network")[0];
+      }
+      if (worked.includes('\\"')) {
+        worked = worked.split('\\"')[0];
+      }
+      if (worked.includes('">')) {
+        worked = worked.split('">')[0];
+      }
+
+      if (worked.includes('"')) {
+        worked = worked.split('"')[0];
+      }
+      if (worked.includes("%3D")) {
+        worked = worked.split("%3D")[0];
+      }
+      if (worked.includes(")")) {
+        worked = worked.split(")")[0];
+      }
+      if (worked.includes(">")) {
+        worked = worked.split(">")[0];
+      }
+      if (worked.includes("\\")) {
+        worked = worked.split("\\")[0];
+      }
+
       const d = atob(worked);
       const data = JSON.parse(d);
       decoded.push(data);
     } catch (err) {
+      console.log("Failed to decode permit", permit, err);
       failed.push(permit);
     }
   }
 
+  decoded = decoded.reduce((acc: PermitDetails[], current) => {
+    const duplicate = acc.find((v) => {
+      try {
+        if (Array.isArray(v)) {
+          if (Array.isArray(current)) {
+            return v[0].permit.nonce === current[0].permit.nonce;
+          } else {
+            return v[0].permit.nonce === current.permit.nonce;
+          }
+        } else {
+          if (Array.isArray(current)) {
+            return v.permit.nonce === current[0].permit.nonce;
+          } else {
+            return v.permit.nonce === current.permit.nonce;
+          }
+        }
+      } catch (err) {
+        console.log(err);
+        console.log(v);
+        console.log(current);
+        throw new Error("Error in decoding permits");
+      }
+    });
+
+    if (!duplicate) {
+      acc.push(current);
+    }
+    return acc;
+  }, []);
+
+  const permitTallies = await tallyPermits(decoded);
+
   if (failed.length) {
     console.log(`Failed to decode ${failed.length} permits`);
-
     await writeToFile("./debug/repos/failed-permits.json", JSON.stringify(failed, null, 2));
   }
+
+  console.log(`Started with ${permits.length} permits`);
+  console.log(`Decoded ${decoded.length} permits`);
 
   const output = await permitsToCSV(decoded);
 
   await writeToFile("./debug/repos/decoded-permits.json", JSON.stringify(decoded, null, 2));
   await writeToFile("./all_repos_decoded-permits.csv", output);
 
-  return decoded;
+  return { decoded, permitTallies };
+}
+
+export async function tallyPermits(data: PermitDetails[]) {
+  return data.reduce((acc, permit) => {
+    if (Array.isArray(permit)) {
+      permit.forEach((p) => {
+        if (acc[p.transferDetails.to]) {
+          acc[p.transferDetails.to] += parseFloat(formatUnits(BigInt(p.transferDetails.requestedAmount), 18));
+        } else {
+          acc[p.transferDetails.to] = parseFloat(formatUnits(BigInt(p.transferDetails.requestedAmount), 18));
+        }
+      });
+    } else {
+      try {
+        if (acc[permit.transferDetails.to]) {
+          acc[permit.transferDetails.to] += parseFloat(formatUnits(BigInt(permit.transferDetails.requestedAmount), 18));
+        } else {
+          acc[permit.transferDetails.to] = parseFloat(formatUnits(BigInt(permit.transferDetails.requestedAmount), 18));
+        }
+      } catch (err) {
+        console.log(err);
+        console.log(permit);
+        return acc;
+      }
+    }
+
+    return acc;
+  }, {} as Contributor);
 }
 
 export async function permitsToCSV(decodedPermits: PermitDetails[]) {
   const header = ["token", "amount", "to", "owner", "nonce", "signature"].join(",") + "\n";
   const rows = decodedPermits.map((permit) => {
-    if (Array.isArray(permit)) {
-      const token = permit[0].permit.permitted.token;
-      const amount = permit[0].permit.permitted.amount;
-      const to = permit[0].transferDetails.to;
-      const owner = permit[0].owner;
-      const nonce = permit[0].permit.nonce;
-      const signature = permit[0].signature;
-      return [token, amount, to, owner, nonce, signature].join(",");
-    } else {
-      const token = permit.permit.permitted.token;
-      const amount = permit.permit.permitted.amount;
-      const to = permit.transferDetails.to;
-      const owner = permit.owner;
-      const nonce = permit.permit.nonce;
-      const signature = permit.signature;
-      return [token, amount, to, owner, nonce, signature].join(",");
+    try {
+      if (Array.isArray(permit)) {
+        const token = permit[0].permit.permitted.token;
+        const amount = permit[0].permit.permitted.amount;
+        const to = permit[0].transferDetails.to;
+        const owner = permit[0].owner;
+        const nonce = permit[0].permit.nonce;
+        const signature = permit[0].signature;
+        return [token, amount, to, owner, nonce, signature].join(",");
+      } else {
+        const token = permit.permit.permitted.token;
+        const amount = permit.permit.permitted.amount;
+        const to = permit.transferDetails.to;
+        const owner = permit.owner;
+        const nonce = permit.permit.nonce;
+        const signature = permit.signature;
+        return [token, amount, to, owner, nonce, signature].join(",");
+      }
+    } catch (err) {
+      console.log(err);
+      console.log(permit);
+      return JSON.stringify(permit);
     }
   });
 
   return header + rows.join("\n");
 }
-
-// function parsePermit(permit: PermitDetails | [PermitDetails]): PermitDetails {
-//   if (Array.isArray(permit)) {
-//     return permit[0];
-//   } else {
-//     return permit;
-//   }
-// }
-
-// 16/15 complexity
-// eslint-disable-next-line sonarjs/cognitive-complexity
-export async function crossReferencePermitsWithPayments(permits: Permits[], payments: PaymentInfo[]) {
-  console.log(`Cross referencing permits with payments...`);
-  const decodedPermits = await decodePermits(permits);
-  // const matchedPayments: PaymentInfo[] = [];
-  // const unmatchedPayments: PaymentInfo[] = [];
-  // const errors: unknown[] = [];
-
-  console.log(`Decoded ${decodedPermits.length} permits`);
-  console.log(`Found ${payments.length} payments`);
-
-  // const tokens = [
-  //   {
-  //     name: "WXDAI",
-  //     address: "0xe91D153E0b41518A2Ce8Dd3D7944Fa863463a97d",
-  //   },
-  //   {
-  //     name: "DAI",
-  //     address: "0x44fA8E6f47987339850636F88629646662444217",
-  //   },
-  // ];
-
-  // for (const permit of decodedPermits) {
-  //   const parsedPermit = parsePermit(permit);
-  //   const token = parsedPermit.permit.permitted.token;
-
-  //   for (const payment of payments) {
-  //     if (!payment) continue;
-
-  //     const currency = tokens.find((t) => t.address === token)?.name ?? "XDAI";
-  //     const paymentAmount = parseUnits(payment.paymentAmount.toString(), 18);
-  //     const permitAmount = BigInt(parsedPermit.permit.permitted.amount);
-
-  //     try {
-  //       if (paymentAmount === permitAmount && payment.currency === currency) {
-  //         matchedPayments.push(payment);
-  //       } else {
-  //         unmatchedPayments.push(payment);
-  //       }
-  //     } catch (err) {
-  //       errors.push(err);
-  //     }
-  //   }
-  // }
-
-  // await processUnmatched(matchedPayments, unmatchedPayments);
-
-  // if (errors.length) {
-  //   console.log(`matching errors: `, errors);
-  // }
-}
-
-// async function processUnmatched(matchedPayments: PaymentInfo[], unmatchedPayments: PaymentInfo[]) {
-//   unmatchedPayments.filter((payment) => !matchedPayments.includes(payment));
-
-//   removeDuplicates(matchedPayments);
-//   removeDuplicates(unmatchedPayments);
-
-//   if (unmatchedPayments.length) {
-//     console.log(`Matched payments: `, matchedPayments.length);
-//     console.log(`Unmatched payments: `, unmatchedPayments.length);
-//     await writeToFile(`./debug/repos/matched-payments.json`, JSON.stringify(matchedPayments, null, 2));
-//     await writeToFile(`./debug/repos/unmatched-payments.json`, JSON.stringify(unmatchedPayments, null, 2));
-//   }
-// }

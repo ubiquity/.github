@@ -1,8 +1,7 @@
 import * as dotenv from "dotenv";
 import { request, gql } from "graphql-request";
-import { dataToCSV, loadingBar, removeDuplicates, writeCSV, writeToFile } from "../utils";
+import { dataToCSV, loadingBar, writeCSV, writeToFile } from "../utils";
 import { Repositories, PaymentInfo, NoPayments, Contributor, CSVData, DebugData, Permits } from "../types";
-import { crossReferencePermitsWithPayments, decodePermits } from "../utils/debug";
 
 dotenv.config();
 
@@ -28,41 +27,53 @@ function commentUrl(repoName: string, issueNumber: string) {
   return `https://github.com/${org}/${repoName}/issues/${issueNumber}`;
 }
 
-export async function invoke(timeFrom?: string) {
-  const since = "2023-01-01T00:00:00.000Z";
+export async function invoke() {
   const loader = await loadingBar();
 
-  const data: CSVData | undefined = await processRepositories(org, timeFrom ? timeFrom : since);
+  const data: CSVData | undefined = await processRepositories(org);
 
   if (!data) {
     throw new Error("No data found processing all repositories.");
   }
 
-  /**
-   * it's very unlikely that a user has two payments for the exact same amount
-   * on the same issue: creator earns less than assignee, and convo rewards shouldn't
-   * be more than assignee rewards. It's possible I guess but very unlikely.
-   */
-
-  const deduped = data.allPayments.filter(
-    (v, i, a) =>
-      a.findIndex(
-        (t) =>
-          t.repoName === v.repoName &&
-          t.issueNumber === v.issueNumber &&
-          t.paymentAmount === v.paymentAmount &&
-          t.currency === v.currency &&
-          t.payee === v.payee
-      ) === i
-  );
-  data.allPayments = deduped;
-
-  await decodePermits(data.permits);
-  await crossReferencePermitsWithPayments(data.permits, data.allPayments);
-
   await writeCSV(data);
 
   clearInterval(loader);
+  return true;
+}
+
+// Process all repositories for payment comments in all issues
+export async function processRepositories(org: string): Promise<CSVData | undefined> {
+  const repos = await fetchPublicRepositories(org);
+
+  const processedRepos: CSVData = {
+    contributors: {},
+    allPayments: [],
+    allNoAssigneePayments: [],
+    noPayments: [],
+    permits: [],
+  };
+
+  for (const repo of repos) {
+    if (repo.isArchived) {
+      console.log(`Skipping archived repository: ${repo.name}`);
+      continue;
+    }
+    const processed = await processRepo(org, repo, true);
+
+    if (!processed) {
+      console.log(`No data for ${repo.name}`);
+      continue;
+    }
+
+    processedRepos.allPayments.push(...processed.allPayments);
+    processedRepos.allNoAssigneePayments.push(...processed.allNoAssigneePayments);
+    processedRepos.noPayments.push(...processed.noPayments);
+    processedRepos.permits.push(...processed.permits);
+    processedRepos.contributors = { ...processedRepos.contributors, ...processed.contributors };
+  }
+
+  return processedRepos;
 }
 
 export async function fetchPublicRepositories(org: string = "Ubiquity", repo?: string): Promise<Repositories[]> {
@@ -135,13 +146,12 @@ export async function fetchPublicRepositories(org: string = "Ubiquity", repo?: s
 // Fetch payments for a single repository
 export async function fetchPaymentsForRepository(
   org: string,
-  repoName: string,
-  since: string
+  repoName: string
 ): Promise<{ payments: PaymentInfo[]; noAssigneePayments: PaymentInfo[]; debugData: DebugData[]; permits: Permits[] }> {
   let hasNextPage = true;
   let cursor = null;
-  let payments = new Set<PaymentInfo>();
-  let noAssigneePayments = new Set<PaymentInfo>();
+  let payments: PaymentInfo[] = [];
+  let noAssigneePayments: PaymentInfo[] = [];
   let debugData: DebugData[] = [];
   let permits: Permits[] = [];
 
@@ -185,7 +195,7 @@ export async function fetchPaymentsForRepository(
 
   while (hasNextPage) {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const response: any = await request(GITHUB_GRAPHQL_API, query, { org, repoName, cursor, since }, { Authorization: `Bearer ${GITHUB_TOKEN}` });
+    const response: any = await request(GITHUB_GRAPHQL_API, query, { org, repoName, cursor }, { Authorization: `Bearer ${GITHUB_TOKEN}` });
 
     for (const issue of response.repository.issues.edges) {
       const issueNumber = issue.node.number;
@@ -196,8 +206,49 @@ export async function fetchPaymentsForRepository(
 
       for (const comment of issue.node.comments.edges) {
         const body = comment.node.body;
-
-        if (comment.node.author?.login === "ubiquibot") {
+        /**
+         * I think it makes sense to parse pavlovcik's comments as well
+         * this way we cover manual payments
+         * I'm biased because it puts me in the top 10 but it makes sense
+         * results parsing pavlovcik's comments:
+         * Started with 492 permits
+         * Decoded 443 permits
+         * Contributors: = 53
+         * All found payments: = 511
+         * Repos without payments = 22
+         * Top 10:
+         * 0x00868BB3BA2B36316c2fc42E4aFB6D4246b77E46,5834.249999999999
+         * 0xf76F1ACB66020f893c95371f740549F312DEA3f1,5036.549999999999
+         * 0x3623338046b101ecEc741De9C3594CC2176f39E5,4444.65
+         * 0x4841e8153a7b9E8B1F218E42d3cBaEb3e99C28eE,3859.25
+         * 0x7e92476D69Ff1377a8b45176b1829C4A5566653a,3648.7999999999997
+         * 0x4D0704f400D57Ba93eEa88765C3FcDBD826dCFc4,3373.65
+         * 0x4007CE2083c7F3E18097aeB3A39bb8eC149a341d,2745.5500000000006
+         * 0xA0B11F474d8ECE1205d38c66d5F2bE8917675d60,2276.25
+         * 0x9e4EF4353C928cD3eb473E8f12aeCF58C208ef40,2196.9
+         * 0xAe5D1F192013db889b1e2115A370aB133f359765,2108.15 < this is me
+         *
+         * results without parsing pavlovcik's comments:
+         * Decoded 431 permits
+         * Contributors: 51
+         * All found payments: 476
+         * Repos without payments: 22
+         * Top 13:
+         * 0x00868BB3BA2B36316c2fc42E4aFB6D4246b77E46,5834.249999999999
+         * 0xf76F1ACB66020f893c95371f740549F312DEA3f1,5036.549999999999
+         * 0x3623338046b101ecEc741De9C3594CC2176f39E5,4244.65
+         * 0x4841e8153a7b9E8B1F218E42d3cBaEb3e99C28eE,3859.25
+         * 0x4D0704f400D57Ba93eEa88765C3FcDBD826dCFc4,3373.65
+         * 0x7e92476D69Ff1377a8b45176b1829C4A5566653a,3073.5
+         * 0x4007CE2083c7F3E18097aeB3A39bb8eC149a341d,2371.250000000001
+         * 0xA0B11F474d8ECE1205d38c66d5F2bE8917675d60,2276.25
+         * 0x9e4EF4353C928cD3eb473E8f12aeCF58C208ef40,2196.9
+         * 0xC3fdC486EEa63D7960e50CC5409fbeA434a6fDf3,2100
+         * 0x8c8b5eeea2770e795f2814e802e335bdb9e5a3b0,1673.1
+         * 0x336C033842FA316d470e820c81b742e62A0765DC,1667.3999999999999
+         * 0xAe5D1F192013db889b1e2115A370aB133f359765,1621.45 this is me
+         */
+        if (comment.node.author?.login === "ubiquibot" || comment.node.author?.login === "pavlovcik") {
           const {
             permits: p,
             payments: pay,
@@ -206,8 +257,8 @@ export async function fetchPaymentsForRepository(
           } = await processComment(body, repoName, issueNumber, issueAssignee, issueCreator, permits, payments, noAssigneePayments, debugData);
 
           permits = Array.from(new Set([...permits, ...p]));
-          payments = new Set(pay);
-          noAssigneePayments = new Set(noP);
+          payments = Array.from(new Set([...payments, ...pay]));
+          noAssigneePayments = Array.from(new Set([...noAssigneePayments, ...noP]));
           debugData = Array.from(new Set([...debugData, ...dd]));
         }
       }
@@ -232,8 +283,8 @@ async function processComment(
   issueAssignee: string,
   issueCreator: string,
   permits: Permits[] = [],
-  payments: Set<PaymentInfo> = new Set(),
-  noAssigneePayments: Set<PaymentInfo> = new Set(),
+  payments: PaymentInfo[] = [],
+  noAssigneePayments: PaymentInfo[] = [],
   debugData: DebugData[] = []
 ) {
   if (!comment) return { permits, payments, noAssigneePayments, debugData };
@@ -241,14 +292,13 @@ async function processComment(
   const match = comment.match(/\*\*CLAIM (\d+(\.\d+)?) (XDAI|DAI|WXDAI)\*\*/g);
   const rematch = comment.match(/CLAIM (\d+(\.\d+)?) (XDAI|DAI|WXDAI)/g);
   const altMatch = comment.match(/\[\s*\[\s*(\d+(\.\d+)?)\s*(XDAI|DAI|WXDAI)\s*\]\]/g);
-  const permitMatch = comment.match(/https:\/\/pay\.ubq\.fi\/?\?claim=[^)]*/g);
+  const permitMatch = comment.match(/https:\/\/pay\.ubq\.fi\/?\?claim=[^\s]*/g);
 
   const isCreator = comment.includes("Task Creator Reward") ? true : false;
   const isConversation = comment.includes("Conversation Rewards") ? true : false;
   const type = isCreator ? "creator" : isConversation ? "conversation" : "assignee";
   const user: string = "DEBUG";
   const containsPermit = permitMatch ? permitMatch[0] : NO_PERMIT_FOUND;
-
   if (containsPermit !== NO_PERMIT_FOUND) {
     const {
       permits: perms,
@@ -327,7 +377,7 @@ async function processComment(
   return { permits, payments, noAssigneePayments, debugData };
 }
 
-async function processMatch(data: ProcessData, match: RegExpMatchArray, payments: Set<PaymentInfo>, noAssigneePayments: Set<PaymentInfo>) {
+async function processMatch(data: ProcessData, match: RegExpMatchArray, payments: PaymentInfo[], noAssigneePayments: PaymentInfo[]) {
   const payment = {
     repoName: data.repoName,
     issueNumber: data.issueNumber,
@@ -338,16 +388,16 @@ async function processMatch(data: ProcessData, match: RegExpMatchArray, payments
     url: commentUrl(data.repoName, data.issueNumber.toString()),
   };
 
-  payments.add(payment);
+  payments.push(payment);
 
   if (data.user === NO_ASSIGNEE) {
-    noAssigneePayments.add(payment);
+    noAssigneePayments.push(payment);
   }
 
   return { payments, noAssigneePayments };
 }
 
-async function processAltMatch(data: ProcessData, altMatch: RegExpMatchArray, payments: Set<PaymentInfo>, noAssigneePayments: Set<PaymentInfo>) {
+async function processAltMatch(data: ProcessData, altMatch: RegExpMatchArray, payments: PaymentInfo[], noAssigneePayments: PaymentInfo[]) {
   if (!altMatch.input) return { payments, noAssigneePayments };
   const matchForUsers = altMatch.input.match(/###### @\w+/g);
   if (!matchForUsers) return { payments, noAssigneePayments };
@@ -370,17 +420,17 @@ async function processAltMatch(data: ProcessData, altMatch: RegExpMatchArray, pa
       url: commentUrl(data.repoName, data.issueNumber.toString()),
     };
 
-    payments.add(payment);
+    payments.push(payment);
 
     if (usr === NO_ASSIGNEE) {
-      noAssigneePayments.add(payment);
+      noAssigneePayments.push(payment);
     }
   }
 
   return { payments, noAssigneePayments };
 }
 
-async function processRematch(data: ProcessData, rematch: RegExpMatchArray, payments: Set<PaymentInfo>, noAssigneePayments: Set<PaymentInfo>) {
+async function processRematch(data: ProcessData, rematch: RegExpMatchArray, payments: PaymentInfo[], noAssigneePayments: PaymentInfo[]) {
   const payment = {
     repoName: data.repoName,
     issueNumber: data.issueNumber,
@@ -391,10 +441,10 @@ async function processRematch(data: ProcessData, rematch: RegExpMatchArray, paym
     url: commentUrl(data.repoName, data.issueNumber.toString()),
   };
 
-  payments.add(payment);
+  payments.push(payment);
 
   if (data.issueAssignee === NO_ASSIGNEE) {
-    noAssigneePayments.add(payment);
+    noAssigneePayments.push(payment);
   }
 
   return {
@@ -410,8 +460,8 @@ async function processPermits(
   issueAssignee: string,
   issueCreator: string,
   permits: Permits[] = [],
-  payments: Set<PaymentInfo> = new Set(),
-  noAssigneePayments: Set<PaymentInfo> = new Set(),
+  payments: PaymentInfo[] = [],
+  noAssigneePayments: PaymentInfo[] = [],
   debugData: DebugData[] = []
 ) {
   const permitCount = Array.from(new Set<string>(comment.match(/https:\/\/pay\.ubq\.fi\/?\?claim=[^\s]*/g)));
@@ -428,7 +478,7 @@ async function processPermits(
       });
     }
 
-    if (payments.size > users.length) {
+    if (payments.length > users.length) {
       const {
         payments: p,
         noAssigneePayments: noP,
@@ -485,8 +535,8 @@ async function processSinglePermitComments(
   issueCreator: string,
   users: string[],
   payouts: string[],
-  payments: Set<PaymentInfo>,
-  noAssigneePayments: Set<PaymentInfo>,
+  payments: PaymentInfo[] = [],
+  noAssigneePayments: PaymentInfo[] = [],
   debugData: DebugData[] = []
 ) {
   const usr = user.split("@")[1];
@@ -502,10 +552,10 @@ async function processSinglePermitComments(
     url: commentUrl(repoName, issueNumber.toString()),
   };
 
-  payments.add(payment);
+  payments.push(payment);
 
   if (user === NO_ASSIGNEE) {
-    noAssigneePayments.add(payment);
+    noAssigneePayments.push(payment);
   } else if (user === "DEBUG") {
     await pushDebugData(
       comment,
@@ -544,8 +594,8 @@ async function processMultiPermitComments(
   issueAssignee: string,
   issueCreator: string,
   payouts: string[],
-  payments: Set<PaymentInfo> = new Set(),
-  noAssigneePayments: Set<PaymentInfo> = new Set(),
+  payments: PaymentInfo[] = [],
+  noAssigneePayments: PaymentInfo[] = [],
   debugData: DebugData[] = []
 ) {
   const usernameReg = /\[ \*\*([^:]+):/g;
@@ -567,10 +617,10 @@ async function processMultiPermitComments(
       url: commentUrl(repoName, issueNumber.toString()),
     };
 
-    payments.add(payment);
+    payments.push(payment);
 
     if (user === NO_ASSIGNEE) {
-      noAssigneePayments.add(payment);
+      noAssigneePayments.push(payment);
     } else if (user === "DEBUG") {
       await pushDebugData(
         comment,
@@ -628,13 +678,23 @@ async function pushDebugData(
 }
 
 // Process a single repository for payment comments
-export async function processRepo(org: string, repo: Repositories, since: string, oneCsv: boolean) {
+export async function processRepo(org: string, repo: Repositories, oneCsv: boolean) {
   console.log(`Processing ${repo.name}...\n`);
   const allPayments: PaymentInfo[] = [];
   const allNoAssigneePayments: PaymentInfo[] = [];
   const noPayments: NoPayments[] = [];
-  const contributors: Contributor = {};
-  const payments = await fetchPaymentsForRepository(org, repo.name, since);
+  let contributors: Contributor = {};
+  let payments;
+
+  try {
+    payments = await fetchPaymentsForRepository(org, repo.name);
+  } catch (err) {
+    console.log(`Error fetching payments for ${repo.name}`, err);
+  }
+
+  if (!payments) {
+    return;
+  }
 
   if (payments.payments.length === 0) {
     noPayments.push({
@@ -648,61 +708,35 @@ export async function processRepo(org: string, repo: Repositories, since: string
 
   if (payments.debugData.length > 0) {
     const sorted = payments.debugData.sort((a, b) => b.paymentAmount - a.paymentAmount);
-    const deduped = removeDuplicates(sorted);
+    const deduped = Array.from(new Set(sorted));
     const csvdata = await dataToCSV(deduped);
 
     await writeToFile(`./debug/repos/${repo.name}.json`, JSON.stringify(deduped, null, 2));
     await writeToFile(`./debug/repos/${repo.name}.csv`, csvdata);
   }
 
-  if (payments.permits.length > 0) {
-    const deduped = removeDuplicates(payments.permits);
-
-    await writeToFile(
-      `./debug/repos/${repo.name}-permits.json`,
-      JSON.stringify(
-        deduped.sort((a, b) => a.repoName.localeCompare(b.repoName)),
-        null,
-        2
-      )
-    );
-  }
-
   if (payments.payments.length > 0) {
-    const deduped = removeDuplicates(payments.payments);
+    const deduped = Array.from(new Set(payments.payments));
     allPayments.push(...deduped);
 
     await writeToFile(`./debug/repos/${repo.name}-payments.json`, JSON.stringify(deduped, null, 2));
   }
 
   if (payments.noAssigneePayments.length > 0) {
-    const deduped = removeDuplicates(payments.noAssigneePayments);
+    const deduped = Array.from(new Set(payments.noAssigneePayments));
     allNoAssigneePayments.push(...deduped);
 
     await writeToFile(`./debug/repos/${repo.name}-no-assignee-payments.json`, JSON.stringify(deduped, null, 2));
   }
 
-  for (const payment of allPayments) {
-    const username = payment.payee;
-    if (username) {
-      if (contributors[username]) {
-        contributors[username] += payment.paymentAmount;
-      } else {
-        contributors[username] = payment.paymentAmount;
-      }
-    }
-  }
-
   if (!oneCsv) {
-    await writeCSV({
+    return await writeCSV({
       contributors,
       allPayments,
       allNoAssigneePayments,
       noPayments,
       permits: payments.permits,
     });
-
-    return undefined;
   } else {
     return {
       repo,
@@ -713,45 +747,4 @@ export async function processRepo(org: string, repo: Repositories, since: string
       permits: payments.permits,
     };
   }
-}
-
-// Process all repositories for payment comments in all issues
-export async function processRepositories(org: string, since: string): Promise<CSVData | undefined> {
-  const repos = await fetchPublicRepositories(org);
-
-  const processedRepos: CSVData = {
-    contributors: {},
-    allPayments: [],
-    allNoAssigneePayments: [],
-    noPayments: [],
-    permits: [],
-  };
-
-  for (const repo of repos) {
-    if (repo.isArchived) {
-      console.log(`Skipping archived repository: ${repo.name}`);
-      continue;
-    }
-    const processed = await processRepo(org, repo, since, true);
-
-    if (!processed) {
-      console.log(`No data for ${repo.name}`);
-      continue;
-    }
-
-    processedRepos.allPayments.push(...processed.allPayments);
-    processedRepos.allNoAssigneePayments.push(...processed.allNoAssigneePayments);
-    processedRepos.noPayments.push(...processed.noPayments);
-    processedRepos.permits.push(...processed.permits);
-
-    for (const [username, balance] of Object.entries(processed.contributors)) {
-      if (processedRepos.contributors[username]) {
-        processedRepos.contributors[username] += balance;
-      } else {
-        processedRepos.contributors[username] = balance;
-      }
-    }
-  }
-
-  return processedRepos;
 }

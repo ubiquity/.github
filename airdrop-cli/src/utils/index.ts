@@ -1,6 +1,7 @@
 import { fetchPublicRepositories } from "../invoke/invoke";
-import { CSVData, Contributor, DebugData, NoPayments, PaymentInfo, PermitDetails, Permits, Repositories } from "../types";
+import { CSVData, Contributor, DebugData, NoPayments, PaymentInfo, Permits, Repositories } from "../types";
 import { writeFile } from "fs";
+import { decodePermits } from "./debug";
 
 // Generates a unique key set for the repositories
 export async function genKeySet() {
@@ -27,23 +28,6 @@ export async function genKeySet() {
   });
 }
 
-export function findDupes<T>(arr: T[]): T[] {
-  return arr.filter((item, index) => arr.indexOf(item) !== index);
-}
-
-// Removes duplicates
-export function removeDuplicates<T>(arr: T[]): T[] {
-  return arr.filter((v, i, a) => a.findIndex((t) => JSON.stringify(t) === JSON.stringify(v)) === i);
-}
-
-// Removes duplicate contributors and sums their balances
-export function removeDuplicatesContributors(cont: Contributor): Contributor {
-  return Object.entries(cont).reduce((acc, [curr, value]) => {
-    acc[curr] = (acc[curr] || 0) + value;
-    return acc;
-  }, {} as Contributor);
-}
-
 // Loading bar for the CLI
 export async function loadingBar() {
   const frames = ["| ", "/ ", "- ", "\\ "];
@@ -64,22 +48,21 @@ export async function dataToCSV(json: DebugData[] | PaymentInfo[] | NoPayments[]
   try {
     if (Array.isArray(json)) {
       if (json[0].url.includes("issue")) {
-        json = removeDuplicates(json as PaymentInfo[]);
+        json = Array.from(new Set(json as PaymentInfo[]));
         csv = json
-          .sort((a: { repoName: string }, b: { repoName: string }) => a.repoName.localeCompare(b.repoName))
+          .sort((a, b) => a.repoName.localeCompare(b.repoName))
           .map((row) => Object.values(row).join(","))
           .join("\n");
       } else {
-        json = removeDuplicates(json as NoPayments[]);
+        json = Array.from(new Set(json as NoPayments[]));
         csv = json
-          .sort((a: { lastCommitDate: string }, b: { lastCommitDate: string }) => {
+          .sort((a, b) => {
             return new Date(b.lastCommitDate).getTime() - new Date(a.lastCommitDate).getTime();
           })
           .map((row) => Object.values(row).join(","))
           .join("\n");
       }
     } else {
-      removeDuplicatesContributors(json);
       csv = Object.entries(json)
         .sort((a, b) => b[1] - a[1])
         .map((row) => row.join(","))
@@ -92,52 +75,18 @@ export async function dataToCSV(json: DebugData[] | PaymentInfo[] | NoPayments[]
   return csv;
 }
 
-export async function permitsToCSV(json: PermitDetails[]) {
-  if (!json || json.length === 0) {
-    return "";
-  }
-  let csv = "";
-
-  try {
-    json = removeDuplicates(json as PermitDetails[]);
-    csv = json.map((row) => Object.values(row).join(",")).join("\n");
-  } catch (err) {
-    console.log(err);
-  }
-
-  return csv;
-}
-
-// Outputs the results from `tally` and `tally-from` to three CSV files
 export async function writeCSV(data: CSVData, title?: string) {
-  console.log("Writing CSVs...");
-
-  console.log(
-    `Lengths:\n contributor = ${Object.keys(data.contributors).length}\n allPayments = ${data.allPayments.length}\n noPayments = ${data.noPayments.length}\n permits = ${data.permits.length}\n`
-  );
-
   const groups = [
     {
       name: "Contributors",
-      headers: ["Username", "Balance"],
-      data: data.contributors,
-    },
-    {
-      name: "All Payments",
-      headers: ["Repository", "Issue #", "Amount", "Currency", "Payee", "Type", "URL"],
-      data: [...data.allPayments, ...data.allNoAssigneePayments],
-    },
-    {
-      name: "No Payments",
-      headers: ["Repository", "Archived", "Last Commit", "Message", "URL"],
-      data: data.noPayments,
-    },
-    {
-      name: "Permits",
-      headers: ["Repository", "Issue #", "Permit"],
-      data: data.permits,
+      headers: ["Address", "Balance"],
+      data: (await decodePermits(data.permits)).permitTallies,
     },
   ];
+
+  console.log(
+    `Contributors: ${Object.keys(groups[0].data).length}\nAll found payments: ${data.allPayments.length}\nRepos without payments: ${data.noPayments.length}\n`
+  );
 
   for (const group of groups) {
     console.log(`Writing ${group.name}...`);
