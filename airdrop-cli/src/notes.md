@@ -1,1 +1,0 @@
-https://github.com/Ubiquity/nft-rewards/issues/2 - catching the bot payments but not the manual for 100 > https://github.com/Ubiquity/nft-rewards/issues/2#issuecomment-1929589644

@@ -1,4 +1,4 @@
-import { Command, command, metadata, param } from "clime";
+import { Command, command, param } from "clime";
 import { processRepo } from "../invoke/invoke";
 import { genKeySet, loadingBar } from "../utils";
 
@@ -7,7 +7,6 @@ import { genKeySet, loadingBar } from "../utils";
   description: "Tally the UBQ airdrop for a single repository.",
 })
 export default class extends Command {
-  @metadata
   async execute(
     @param({
       description: "The repository name or key.",
