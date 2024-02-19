@@ -1,5 +1,5 @@
 import { Command, command, param } from "clime";
-import { processRepo } from "../invoke/invoke";
+import { processRepo } from "../tally/tally";
 import { genKeySet, loadingBar } from "../utils";
 
 @command({
