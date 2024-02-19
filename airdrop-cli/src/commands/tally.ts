@@ -1,5 +1,5 @@
 import { Command, command, metadata } from "clime";
-import { invoke } from "../invoke/invoke";
+import { invoke } from "../tally/tally";
 
 // Tally command
 // Takes around 1 minute to complete using async/await (rate limited using promises)

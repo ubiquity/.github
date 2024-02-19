@@ -1,4 +1,4 @@
-import { fetchPublicRepositories } from "../invoke/invoke";
+import { fetchPublicRepositories } from "../tally/tally";
 import { CSVData, Contributor, DebugData, NoPayments, PaymentInfo, Permits, Repositories } from "../types";
 import { writeFile } from "fs";
 import { decodePermits } from "./debug";
