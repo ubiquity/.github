@@ -64,69 +64,55 @@ export async function debugCSVByTypeOfMatch(data: { [key: string]: DebugData[] }
   }
 }
 
-export async function decodePermits(data: Permits[]) {
-  const permits = Array.from(new Set(data.map((perm) => perm.url)));
+function formatStr(str: string) {
+  // 37 permits failed to decode, below are the reasons why
 
-  let decoded: PermitDetails[] = [];
-  const failed: string[] = [];
-
-  for (const permit of permits) {
-    try {
-      let worked = permit.split("=")[1].split("&")[0].replace(/"/g, "");
-      // 37 permits failed to decode, below are the reasons why
-
-      if (worked.includes('%3D&network=100"')) {
-        worked = worked.split('%3D&network=100"')[0];
-      }
-      if (worked.includes('\\">')) {
-        worked = worked.split('\\">')[0];
-      }
-      if (worked.includes('%3D"')) {
-        worked = worked.split('%3D"')[0];
-      }
-
-      if (worked.includes("%3D%3D")) {
-        worked = worked.split("%3D%3D")[0];
-      }
-      if (worked.includes("%3D&")) {
-        worked = worked.split("%3D&")[0];
-      }
-      if (worked.includes("&network")) {
-        worked = worked.split("&network")[0];
-      }
-      if (worked.includes('\\"')) {
-        worked = worked.split('\\"')[0];
-      }
-      if (worked.includes('">')) {
-        worked = worked.split('">')[0];
-      }
-
-      if (worked.includes('"')) {
-        worked = worked.split('"')[0];
-      }
-      if (worked.includes("%3D")) {
-        worked = worked.split("%3D")[0];
-      }
-      if (worked.includes(")")) {
-        worked = worked.split(")")[0];
-      }
-      if (worked.includes(">")) {
-        worked = worked.split(">")[0];
-      }
-      if (worked.includes("\\")) {
-        worked = worked.split("\\")[0];
-      }
-
-      const d = atob(worked);
-      const data = JSON.parse(d);
-      decoded.push(data);
-    } catch (err) {
-      console.log("Failed to decode permit", permit, err);
-      failed.push(permit);
-    }
+  if (str.includes('%3D&network=100"')) {
+    str = str.split('%3D&network=100"')[0];
+  }
+  if (str.includes('\\">')) {
+    str = str.split('\\">')[0];
+  }
+  if (str.includes('%3D"')) {
+    str = str.split('%3D"')[0];
   }
 
-  decoded = decoded.reduce((acc: PermitDetails[], current) => {
+  if (str.includes("%3D%3D")) {
+    str = str.split("%3D%3D")[0];
+  }
+  if (str.includes("%3D&")) {
+    str = str.split("%3D&")[0];
+  }
+  if (str.includes("&network")) {
+    str = str.split("&network")[0];
+  }
+  if (str.includes('\\"')) {
+    str = str.split('\\"')[0];
+  }
+  if (str.includes('">')) {
+    str = str.split('">')[0];
+  }
+
+  if (str.includes('"')) {
+    str = str.split('"')[0];
+  }
+  if (str.includes("%3D")) {
+    str = str.split("%3D")[0];
+  }
+  if (str.includes(")")) {
+    str = str.split(")")[0];
+  }
+  if (str.includes(">")) {
+    str = str.split(">")[0];
+  }
+  if (str.includes("\\")) {
+    str = str.split("\\")[0];
+  }
+  return str;
+}
+
+async function processDecoded(data: PermitDetails[]) {
+  return data.reduce((acc: PermitDetails[], current) => {
     const duplicate = acc.find((v) => {
       try {
         if (Array.isArray(v)) {
@@ -155,6 +141,30 @@ export async function decodePermits(data: Permits[]) {
     }
     return acc;
   }, []);
+}
+export async function decodePermits(data: Permits[]) {
+  const permits = Array.from(new Set(data.map((perm) => perm.url)));
+
+  let decoded: PermitDetails[] = [];
+  const failed: string[] = [];
+
+  for (const permit of permits) {
+    try {
+      let worked = permit.split("=")[1].split("&")[0].replace(/"/g, "");
+      worked = formatStr(worked);
+      const d = atob(worked);
+      const data = JSON.parse(d);
+      decoded.push(data);
+    } catch (err) {
+      console.log("Failed to decode permit", permit, err);
+      failed.push(permit);
+    }
+  }
+
+  decoded = await processDecoded(decoded);
+
+  console.log(`Started with ${permits.length} permits`);
+  console.log(`Decoded ${decoded.length} permits`);
 
   const permitTallies = await tallyPermits(decoded);
 
@@ -163,12 +173,10 @@ export async function decodePermits(data: Permits[]) {
     await writeToFile("./debug/repos/failed-permits.json", JSON.stringify(failed, null, 2));
   }
 
-  console.log(`Started with ${permits.length} permits`);
-  console.log(`Decoded ${decoded.length} permits`);
-
   const output = await permitsToCSV(decoded);
 
   await writeToFile("./debug/repos/decoded-permits.json", JSON.stringify(decoded, null, 2));
+
   await writeToFile("./all_repos_decoded-permits.csv", output);
 
   return { decoded, permitTallies };

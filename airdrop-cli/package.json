@@ -19,9 +19,8 @@
     "cli:debug": "node dist/index.js debug",
     "cli:start": "node dist/index.js",
     "cli:tally": "node dist/index.js tally",
-    "cli:tally-multi-csv": "node dist/index.js tally-multi-csv",
-    "cli:tally-from": "node dist/index.js tally-from",
     "cli:single": "node dist/index.js single",
+    "cli:unspent": "node dist/index.js unspent",
     "cli:help": "node dist/index.js help",
     "cli:build": "npx tsc",
     "cli:tsx": "yarn tsx src/invoke/index.ts",
@@ -38,6 +37,7 @@
     "axios": "^1.6.7",
     "clime": "^0.5.16",
     "dotenv": "^16.4.2",
+    "ethers": "^5.7.2",
     "graphql": "^16.8.1",
     "graphql-request": "^6.1.0",
     "viem": "^2.7.8"
