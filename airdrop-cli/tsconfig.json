@@ -1,7 +1,8 @@
 {
   "compilerOptions": {
-    "target": "es2016",
+    "target": "ESNext",
     "module": "commonjs",
+    "resolveJsonModule": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
@@ -19,12 +20,12 @@
     "skipDefaultLibCheck": true,
     "newLine": "LF",
     "outDir": "dist",
-    "plugins": []
+    "plugins": [],
   },
   "include": [
     "src",
+    "src/commands/unspent.ts",
   ],
-  "resolveJsonModule": true,
   "exclude": [
     "node_modules",
     "dist"

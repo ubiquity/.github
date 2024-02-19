@@ -683,7 +683,7 @@ export async function processRepo(org: string, repo: Repositories, oneCsv: boole
   const allPayments: PaymentInfo[] = [];
   const allNoAssigneePayments: PaymentInfo[] = [];
   const noPayments: NoPayments[] = [];
-  let contributors: Contributor = {};
+  const contributors: Contributor = {};
   let payments;
 
   try {
