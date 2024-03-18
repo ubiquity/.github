@@ -2,28 +2,6 @@ name: Automatic Cloudflare Deploy
 
 on:
   workflow_call:
-    inputs:
-      custom_domain:
-        required: false
-        type: string
-      production_branch:
-        required: false
-        type: string
-      build_artifact_name:
-        required: false
-        type: string
-      build_artifact_run_id:
-        required: false
-        type: string
-    secrets:
-      CLOUDFLARE_API_TOKEN:
-        required: true
-      CLOUDFLARE_ACCOUNT_ID:
-        required: false
-      APP_ID:
-        required: true
-      APP_PRIVATE_KEY:
-        required: true
 
 jobs:
   deploy-to-cloudflare:
