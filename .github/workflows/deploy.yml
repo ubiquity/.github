@@ -2,104 +2,51 @@ name: Automatic Cloudflare Deploy
 
 on:
   workflow_call:
-    inputs:
-      custom_domain:
-        required: false
-        type: string
-      production_branch:
-        required: false
-        type: string
-      build_artifact_name:
-        required: false
-        type: string
-      build_artifact_run_id:
-        required: false
-        type: string
-    secrets:
-      CLOUDFLARE_API_TOKEN:
-        required: true
-      CLOUDFLARE_ACCOUNT_ID:
-        required: false
-      APP_ID:
-        required: true
-      APP_PRIVATE_KEY:
-        required: true
 
 jobs:
   deploy-to-cloudflare:
-    name: Deploy to Cloudflare Pages
+    name: Automatic Cloudflare Deploy
     runs-on: ubuntu-22.04
-    permissions:
-      contents: read
-      pull-requests: write
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-        with:
-          repository: ubiquity/.github
-
-      - name: Setup Node
+      - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20.10.0"
+          node-version: 20.10.0
 
-      - name: Wrangler Install
-        run: yarn add -g wrangler
-
-      - name: "Download Artifact"
-        uses: actions/github-script@v6.3.3
+      - name: Find associated pull request
+        id: pr
+        uses: actions/github-script@v7
         with:
           script: |
-            const fs = require("fs");
-            const downloadArtifact = require("${{ github.workspace }}/utils/download-artifact.js");
-            const workflowRunId = "${{ inputs.build_artifact_run_id || github.event.workflow_run.id }}";
-            const artifactName = "${{ inputs.build_artifact_name || 'pr' }}";
-            downloadArtifact({ github, context, fs, workflowRunId, artifactName });
+            const response = await github.rest.search.issuesAndPullRequests({
+              q: 'repo:${{ github.repository }} is:pr sha:${{ github.event.workflow_run.head_sha }}',
+              per_page: 1,
+            })
+            const items = response.data.items
+            if (items.length < 1) {
+              console.error('No PRs found')
+              return
+            }
+            const pullRequestNumber = items[0].number
+            console.info("Pull request number is", pullRequestNumber)
+            return pullRequestNumber
 
-      - name: Extract Artifact
-        run: |
-          mkdir ./dist
-          unzip pull-request-artifact.zip
-          unzip pull-request.zip -d ./dist
-          ls
-
-      - name: Publish to Cloudflare
-        id: publish-to-cloudflare
-        env:
-          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
-          REPOSITORY: ${{ github.repository }}
-          PRODUCTION_BRANCH: ${{ inputs.production_branch || 'development' }}
-          OUTPUT_DIRECTORY: "./dist"
-        run: |
-          IFS="/" read -ra fields <<< "$REPOSITORY"
-          projectName="${fields[1]}"
-          projectName=$(echo $projectName | sed "s/\./-/g")
-          echo $projectName
-          wrangler pages project list > project_list.txt
-          if grep -q $projectName project_list.txt; then
-            echo "Project found"
-          else
-            echo "Project not found"
-            wrangler pages project create "$projectName" --production-branch "$PRODUCTION_BRANCH"
-          fi
-          wrangler pages deploy "$OUTPUT_DIRECTORY" --project-name "$projectName" > ./deployments.log
-          cat deployments.log
-
-      - name: Get UbiquiBot Token
-        uses: tibdex/github-app-token@v1.7.0
-        id: get_installation_token
+      - name: Download build artifact
+        uses: dawidd6/action-download-artifact@v3
         with:
-          app_id: ${{ secrets.APP_ID }}
-          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+          name: static
+          path: static
+          run_id: ${{ github.event.workflow_run.id }}
 
-      - name: Deploy Comment as UbiquiBot
-        uses: actions/github-script@v6
+      - name: Deploy to Cloudflare
+        if: ${{ github.event.workflow_run.conclusion == 'success' }}
+        uses: ubiquity/cloudflare-deploy-action@ci/debug-secrets
         with:
-          github-token: ${{ steps.get_installation_token.outputs.token }}
-          script: |
-            const fs = require("fs");
-            const printDeploymentsLog = require("${{ github.workspace }}/utils/print-deployments-logs.js");
-            const customDomain = "${{ inputs.custom_domain || '' }}";
-            await printDeploymentsLog({ github, context, fs, customDomain });
+          repository: ${{ github.repository }}
+          production_branch: ${{ github.event.repository.default_branch }}
+          output_directory: "static"
+          current_branch: ${{ github.event.workflow_run.head_branch }}
+          pull_request_number: ${{ steps.pr.outputs.result }}
+          cloudflare_account_id: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          cloudflare_api_token: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          commit_sha: ${{ github.event.workflow_run.head_sha }}
