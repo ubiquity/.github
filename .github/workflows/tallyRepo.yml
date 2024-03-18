@@ -1,12 +1,7 @@
 name: Run UBQ Airdrop CLI
 
 on:
-  push:
-    branches:
-      - master
-      - main
-      - development
-      - airdrop-cli
+  workflow_dispatch:
 
 jobs:
   run-cli:
