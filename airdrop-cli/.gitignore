@@ -10,4 +10,6 @@ static/dist
 .env
 dist
 *.csv
+!all_repos_contributors.csv
+
 debug/repos/*
