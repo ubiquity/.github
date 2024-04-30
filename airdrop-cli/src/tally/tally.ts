@@ -2,6 +2,7 @@ import * as dotenv from "dotenv";
 import { request, gql } from "graphql-request";
 import { dataToCSV, loadingBar, writeCSV, writeToFile } from "../utils";
 import { Repositories, PaymentInfo, NoPayments, Contributor, CSVData, DebugData, Permits } from "../types";
+import { existsSync, mkdirSync } from "fs";
 
 dotenv.config();
 
@@ -10,7 +11,7 @@ const GITHUB_GRAPHQL_API = "https://api.github.com/graphql";
 
 const NO_ASSIGNEE = "No assignee";
 const NO_PERMIT_FOUND = "No permit found";
-const org = "Ubiquity";
+const orgs = ["Ubiquity", "ubiquibot"];
 
 interface ProcessData {
   isCreator: boolean;
@@ -23,14 +24,39 @@ interface ProcessData {
   type: string;
 }
 
-function commentUrl(repoName: string, issueNumber: string) {
+function commentUrl(org: string, repoName: string, issueNumber: string) {
   return `https://github.com/${org}/${repoName}/issues/${issueNumber}`;
 }
 
 export async function invoke() {
   const loader = await loadingBar();
 
-  const data: CSVData | undefined = await processRepositories(org);
+  const debugDir = "debug/repos";
+
+  if (!existsSync(debugDir)) {
+    mkdirSync(debugDir, { recursive: true });
+  }
+
+  let data: CSVData | undefined;
+
+  for (const org of orgs) {
+    const processedRepos = await processRepositories(org);
+
+    if (!processedRepos) {
+      console.log(`No data found processing all repositories for ${org}.`);
+      continue;
+    }
+
+    if (!data) {
+      data = processedRepos;
+    } else {
+      data.allPayments.push(...processedRepos.allPayments);
+      data.allNoAssigneePayments.push(...processedRepos.allNoAssigneePayments);
+      data.noPayments.push(...processedRepos.noPayments);
+      data.permits.push(...processedRepos.permits);
+      data.contributors = { ...data.contributors, ...processedRepos.contributors };
+    }
+  }
 
   if (!data) {
     throw new Error("No data found processing all repositories.");
@@ -206,55 +232,13 @@ export async function fetchPaymentsForRepository(
 
       for (const comment of issue.node.comments.edges) {
         const body = comment.node.body;
-        /**
-         * I think it makes sense to parse pavlovcik's comments as well
-         * this way we cover manual payments
-         * I'm biased because it puts me in the top 10 but it makes sense
-         * results parsing pavlovcik's comments:
-         * Started with 492 permits
-         * Decoded 443 permits
-         * Contributors: = 53
-         * All found payments: = 511
-         * Repos without payments = 22
-         * Top 10:
-         * 0x00868BB3BA2B36316c2fc42E4aFB6D4246b77E46,5834.249999999999
-         * 0xf76F1ACB66020f893c95371f740549F312DEA3f1,5036.549999999999
-         * 0x3623338046b101ecEc741De9C3594CC2176f39E5,4444.65
-         * 0x4841e8153a7b9E8B1F218E42d3cBaEb3e99C28eE,3859.25
-         * 0x7e92476D69Ff1377a8b45176b1829C4A5566653a,3648.7999999999997
-         * 0x4D0704f400D57Ba93eEa88765C3FcDBD826dCFc4,3373.65
-         * 0x4007CE2083c7F3E18097aeB3A39bb8eC149a341d,2745.5500000000006
-         * 0xA0B11F474d8ECE1205d38c66d5F2bE8917675d60,2276.25
-         * 0x9e4EF4353C928cD3eb473E8f12aeCF58C208ef40,2196.9
-         * 0xAe5D1F192013db889b1e2115A370aB133f359765,2108.15 < this is me
-         *
-         * results without parsing pavlovcik's comments:
-         * Decoded 431 permits
-         * Contributors: 51
-         * All found payments: 476
-         * Repos without payments: 22
-         * Top 13:
-         * 0x00868BB3BA2B36316c2fc42E4aFB6D4246b77E46,5834.249999999999
-         * 0xf76F1ACB66020f893c95371f740549F312DEA3f1,5036.549999999999
-         * 0x3623338046b101ecEc741De9C3594CC2176f39E5,4244.65
-         * 0x4841e8153a7b9E8B1F218E42d3cBaEb3e99C28eE,3859.25
-         * 0x4D0704f400D57Ba93eEa88765C3FcDBD826dCFc4,3373.65
-         * 0x7e92476D69Ff1377a8b45176b1829C4A5566653a,3073.5
-         * 0x4007CE2083c7F3E18097aeB3A39bb8eC149a341d,2371.250000000001
-         * 0xA0B11F474d8ECE1205d38c66d5F2bE8917675d60,2276.25
-         * 0x9e4EF4353C928cD3eb473E8f12aeCF58C208ef40,2196.9
-         * 0xC3fdC486EEa63D7960e50CC5409fbeA434a6fDf3,2100
-         * 0x8c8b5eeea2770e795f2814e802e335bdb9e5a3b0,1673.1
-         * 0x336C033842FA316d470e820c81b742e62A0765DC,1667.3999999999999
-         * 0xAe5D1F192013db889b1e2115A370aB133f359765,1621.45 this is me
-         */
-        if (comment.node.author?.login === "ubiquibot" || comment.node.author?.login === "pavlovcik") {
+        if (comment.node.author?.login === "ubiquibot" || comment.node.author?.login === "pavlovcik" || comment.node.author?.login === "0x4007") {
           const {
             permits: p,
             payments: pay,
             noAssigneePayments: noP,
             debugData: dd,
-          } = await processComment(body, repoName, issueNumber, issueAssignee, issueCreator, permits, payments, noAssigneePayments, debugData);
+          } = await processComment(org, body, repoName, issueNumber, issueAssignee, issueCreator, permits, payments, noAssigneePayments, debugData);
 
           permits = Array.from(new Set([...permits, ...p]));
           payments = Array.from(new Set([...payments, ...pay]));
@@ -277,6 +261,7 @@ export async function fetchPaymentsForRepository(
 }
 
 async function processComment(
+  org: string,
   comment: string,
   repoName: string,
   issueNumber: number,
@@ -305,7 +290,7 @@ async function processComment(
       payments: p,
       noAssigneePayments: noP,
       debugData: dd,
-    } = await processPermits(comment, repoName, issueNumber, issueAssignee, issueCreator, permits, payments, noAssigneePayments, debugData);
+    } = await processPermits(org, comment, repoName, issueNumber, issueAssignee, issueCreator, permits, payments, noAssigneePayments, debugData);
 
     permits = perms;
     payments = p;
@@ -315,6 +300,7 @@ async function processComment(
 
   if (match) {
     const { payments: p, noAssigneePayments: noP } = await processMatch(
+      org,
       {
         isCreator,
         isConversation,
@@ -334,6 +320,7 @@ async function processComment(
     noAssigneePayments = noP;
   } else if (altMatch) {
     const { payments: p, noAssigneePayments: noP } = await processAltMatch(
+      org,
       {
         isCreator,
         isConversation,
@@ -353,6 +340,7 @@ async function processComment(
     noAssigneePayments = noP;
   } else if (rematch) {
     const { payments: p, noAssigneePayments: noP } = await processRematch(
+      org,
       {
         isCreator,
         isConversation,
@@ -371,13 +359,13 @@ async function processComment(
     payments = p;
     noAssigneePayments = noP;
   } else if (containsPermit !== NO_PERMIT_FOUND) {
-    await pushDebugData(comment, repoName, issueNumber, issueAssignee, issueCreator, type, debugData, "no-match-but-permit-found", containsPermit);
+    await pushDebugData(org, comment, repoName, issueNumber, issueAssignee, issueCreator, type, debugData, "no-match-but-permit-found", containsPermit);
   }
 
   return { permits, payments, noAssigneePayments, debugData };
 }
 
-async function processMatch(data: ProcessData, match: RegExpMatchArray, payments: PaymentInfo[], noAssigneePayments: PaymentInfo[]) {
+async function processMatch(org: string, data: ProcessData, match: RegExpMatchArray, payments: PaymentInfo[], noAssigneePayments: PaymentInfo[]) {
   const payment = {
     repoName: data.repoName,
     issueNumber: data.issueNumber,
@@ -385,7 +373,7 @@ async function processMatch(data: ProcessData, match: RegExpMatchArray, payments
     currency: match[3],
     payee: data.user,
     type: data.type,
-    url: commentUrl(data.repoName, data.issueNumber.toString()),
+    url: commentUrl(org, data.repoName, data.issueNumber.toString()),
   };
 
   payments.push(payment);
@@ -397,7 +385,7 @@ async function processMatch(data: ProcessData, match: RegExpMatchArray, payments
   return { payments, noAssigneePayments };
 }
 
-async function processAltMatch(data: ProcessData, altMatch: RegExpMatchArray, payments: PaymentInfo[], noAssigneePayments: PaymentInfo[]) {
+async function processAltMatch(org: string, data: ProcessData, altMatch: RegExpMatchArray, payments: PaymentInfo[], noAssigneePayments: PaymentInfo[]) {
   if (!altMatch.input) return { payments, noAssigneePayments };
   const matchForUsers = altMatch.input.match(/###### @\w+/g);
   if (!matchForUsers) return { payments, noAssigneePayments };
@@ -417,7 +405,7 @@ async function processAltMatch(data: ProcessData, altMatch: RegExpMatchArray, pa
       currency: payouts[users.indexOf(user)].split(" ")[1],
       payee: usr,
       type: data.type,
-      url: commentUrl(data.repoName, data.issueNumber.toString()),
+      url: commentUrl(org, data.repoName, data.issueNumber.toString()),
     };
 
     payments.push(payment);
@@ -430,7 +418,7 @@ async function processAltMatch(data: ProcessData, altMatch: RegExpMatchArray, pa
   return { payments, noAssigneePayments };
 }
 
-async function processRematch(data: ProcessData, rematch: RegExpMatchArray, payments: PaymentInfo[], noAssigneePayments: PaymentInfo[]) {
+async function processRematch(org: string, data: ProcessData, rematch: RegExpMatchArray, payments: PaymentInfo[], noAssigneePayments: PaymentInfo[]) {
   const payment = {
     repoName: data.repoName,
     issueNumber: data.issueNumber,
@@ -438,7 +426,7 @@ async function processRematch(data: ProcessData, rematch: RegExpMatchArray, paym
     currency: rematch[0].split(" ")[2],
     payee: data.issueAssignee,
     type: data.type,
-    url: commentUrl(data.repoName, data.issueNumber.toString()),
+    url: commentUrl(org, data.repoName, data.issueNumber.toString()),
   };
 
   payments.push(payment);
@@ -454,6 +442,7 @@ async function processRematch(data: ProcessData, rematch: RegExpMatchArray, paym
 }
 
 async function processPermits(
+  org: string,
   comment: string,
   repoName: string,
   issueNumber: number,
@@ -483,7 +472,18 @@ async function processPermits(
         payments: p,
         noAssigneePayments: noP,
         debugData: dd,
-      } = await processMultiPermitComments(comment, repoName, issueNumber, issueAssignee, issueCreator, payouts ?? [], payments, noAssigneePayments, debugData);
+      } = await processMultiPermitComments(
+        org,
+        comment,
+        repoName,
+        issueNumber,
+        issueAssignee,
+        issueCreator,
+        payouts ?? [],
+        payments,
+        noAssigneePayments,
+        debugData
+      );
 
       payments = p;
       noAssigneePayments = noP;
@@ -496,6 +496,7 @@ async function processPermits(
         noAssigneePayments: noP,
         debugData: dd,
       } = await processSinglePermitComments(
+        org,
         comment,
         user,
         repoName,
@@ -527,6 +528,7 @@ async function processPermits(
 }
 
 async function processSinglePermitComments(
+  org: string,
   comment: string,
   user: string,
   repoName: string,
@@ -549,7 +551,7 @@ async function processSinglePermitComments(
     payee: usr,
     type: usr === issueAssignee ? "assignee" : usr === issueCreator ? "creator" : "conversation",
 
-    url: commentUrl(repoName, issueNumber.toString()),
+    url: commentUrl(org, repoName, issueNumber.toString()),
   };
 
   payments.push(payment);
@@ -558,6 +560,7 @@ async function processSinglePermitComments(
     noAssigneePayments.push(payment);
   } else if (user === "DEBUG") {
     await pushDebugData(
+      org,
       comment,
       repoName,
       issueNumber,
@@ -570,6 +573,7 @@ async function processSinglePermitComments(
     );
   } else if (payment.paymentAmount === 0) {
     await pushDebugData(
+      org,
       comment,
       repoName,
       issueNumber,
@@ -588,6 +592,7 @@ async function processSinglePermitComments(
 // 16/15 complexity
 // eslint-disable-next-line sonarjs/cognitive-complexity
 async function processMultiPermitComments(
+  org: string,
   comment: string,
   repoName: string,
   issueNumber: number,
@@ -614,7 +619,7 @@ async function processMultiPermitComments(
       currency: payouts[usernames.indexOf(user)]?.split(" ")[1] ?? "DEBUG",
       payee: user,
       type: type,
-      url: commentUrl(repoName, issueNumber.toString()),
+      url: commentUrl(org, repoName, issueNumber.toString()),
     };
 
     payments.push(payment);
@@ -623,6 +628,7 @@ async function processMultiPermitComments(
       noAssigneePayments.push(payment);
     } else if (user === "DEBUG") {
       await pushDebugData(
+        org,
         comment,
         repoName,
         issueNumber,
@@ -635,6 +641,7 @@ async function processMultiPermitComments(
       );
     } else if (payment.paymentAmount === 0) {
       await pushDebugData(
+        org,
         comment,
         repoName,
         issueNumber,
@@ -652,6 +659,7 @@ async function processMultiPermitComments(
 }
 
 async function pushDebugData(
+  org: string,
   comment: string,
   repoName: string,
   issueNumber: number,
@@ -669,7 +677,7 @@ async function pushDebugData(
     currency: "DEBUG",
     payee: `DEBUG-assignee-${issueAssignee}`,
     type,
-    url: `https://github.com/ubiquity/${repoName}/issues/${issueNumber}`,
+    url: `https://github.com/${org}/${repoName}/issues/${issueNumber}`,
     comment: comment,
     permit,
     issueCreator,
