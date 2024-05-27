@@ -74,7 +74,8 @@ export class PaidIssueParser {
     const outFile = Object.entries(this.userPaymentInfo).map(([key, value]) => ({ [key]: Array.from(value) }));
 
     await writeFile("src/scripts/data/paid-out-repo-issue-permits.json", JSON.stringify(this.repoPaymentInfo, null, 2));
-    await writeFile("src/scripts/data/src/scripts/data/paid-out-user-permits.json", JSON.stringify(outFile, null, 2));
+    await writeFile("src/scripts/data/scripts/data/paid-out-user-permits.json", JSON.stringify(outFile, null, 2));
+    await writeFile("src/scripts/data/paid-out-wallet-permits.json", JSON.stringify(this.walletPaymentInfo, null, 2));
 
     await this.leaderboard();
     clearInterval(loader);
@@ -517,14 +518,14 @@ export class PaidIssueParser {
   }
 }
 
-async function main() {
-  const parser = new PaidIssueParser();
-  await parser.run();
-}
+// async function main() {
+//   const parser = new PaidIssueParser();
+//   await parser.run();
+// }
 
-main()
-  .catch(console.error)
-  .finally(() => process.exit(0));
+// main()
+//   .catch(console.error)
+//   .finally(() => process.exit(0));
 
 const fetchPublicRepoQuery = gql`
   query ($org: String!, $cursor: String) {

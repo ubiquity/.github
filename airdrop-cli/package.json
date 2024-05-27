@@ -31,8 +31,11 @@
     "open-source"
   ],
   "dependencies": {
+    "@octokit/rest": "^20.1.1",
+    "@supabase/supabase-js": "^2.43.2",
     "axios": "^1.6.7",
     "clime": "^0.5.16",
+    "decimal.js": "^10.4.3",
     "dotenv": "^16.4.2",
     "ethers": "^5.7.2",
     "graphql": "^16.8.1",
