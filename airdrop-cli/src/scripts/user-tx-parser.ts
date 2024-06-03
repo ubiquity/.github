@@ -1,10 +1,10 @@
-import { ethers } from "ethers";
+import { BigNumber, ethers } from "ethers";
 import { SupabaseClient, createClient } from "@supabase/supabase-js";
 import { permit2Abi } from "../abis/permit2Abi";
 import { writeFile } from "fs/promises";
 import { formatUnits } from "viem";
-import { Decoded, User } from "../types";
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from "../utils/constants";
+import { Decoded, ScanResponse, User } from "../types";
+import { SUPABASE_ANON_KEY, SUPABASE_URL, UBQ_OWNERS } from "../utils/constants";
 
 /**
  * Collects permits using Etherscan and Gnosisscan APIs.
@@ -27,8 +27,12 @@ export class UserBlockTxParser {
   etherscanApiKey: string;
   permitDecoder: ethers.utils.Interface;
   sb: SupabaseClient;
-  ethProvider: ethers.providers.JsonRpcProvider;
-  gnosisProvider: ethers.providers.JsonRpcProvider;
+  ethProvider: ethers.providers.WebSocketProvider;
+  gnosisProvider: ethers.providers.WebSocketProvider;
+  userWallets: (string | undefined)[] = [];
+  users: User[] = [];
+  userPermits: Record<string, Decoded[]> = {};
+  userSigPermits: Record<string, Decoded> = {};
 
   constructor(gnosisApiKey = "WR9YP2CY3NG2WRX8FN5DCNKKIAGIIN83YN", etherscanApiKey = "JPHWVVUBAIP1UVQZSSDKV73YX48I2M7SWV") {
     this.gnosisApiKey = gnosisApiKey;
@@ -52,64 +56,22 @@ export class UserBlockTxParser {
     const loader = this.loader();
 
     // collect user info
-    const { idToWalletMap, users } = await this.getSupabaseData();
-
-    // previous and current UBQ wallet addresses
-    const owners = [
-      "0xf87ca4583C792212e52720d127E7E0A38B818aD1".toLowerCase(),
-      "0x44Ca15Db101fD1c194467Db6AF0c67C6BbF4AB51".toLowerCase(),
-      "0x816863778F0Ea481E00195606B50d91F7C64637c".toLowerCase(),
-      "0x70fbcF82ffa891C4267B77847c21243c566f7617".toLowerCase(),
-    ];
+    const { idToWalletMap } = await this.getSupabaseData();
 
     // collect wallet addresses
-    const userWalletIds = users.map((user) => user.wallet_id);
-    const userWallets = userWalletIds.map((id) => idToWalletMap.get(id)?.toLowerCase());
+    const userWalletIds = this.users.map((user) => user.wallet_id);
+    this.userWallets = userWalletIds.map((id) => idToWalletMap.get(id)?.toLowerCase());
 
-    const userPermitSet: Record<string, Set<Decoded>> = {};
+    await this.batcher();
 
-    // process tx history using permit2 as the source
-    const permit2TxHistoryPermits = await this.processPermit2(userWallets);
-
-    // process tx history using UBQ wallet addressses as the source
-    const ownerTxHistoryPermits = await this.processOwners(userWallets, owners);
-
-    // process tx history using user wallet addresses as the source
-    const userTxHistoryPermits = await this.processUsers(idToWalletMap, users);
-
-    // combine permits from all sources
-    const userPermits: Record<string, Decoded[]> = { ...permit2TxHistoryPermits, ...ownerTxHistoryPermits, ...userTxHistoryPermits };
-
-    for (const user of Object.keys(userPermits)) {
-      // collect just the user's permits
-      const permits = userPermits[user as keyof typeof userPermits];
-
-      for (const permit of permits) {
-        if (!userPermitSet[user]) {
-          userPermitSet[user] = new Set();
-        }
-
-        // add permit to user's set, to avoid duplicates
-        userPermitSet[user].add(permit);
-      }
-    }
-
-    // convert userPermitSet to userPermitArray
-    const userPermitArray: Record<string, Decoded[]> = {};
-
-    for (const user of Object.keys(userPermitSet)) {
-      userPermitArray[user] = Array.from(userPermitSet[user]);
-    }
-
-    await writeFile("src/scripts/data/blockscan-user-permits.json", JSON.stringify(userPermitArray, null, 2));
+    await writeFile("src/scripts/data/user-tx-permits.json", JSON.stringify(this.userPermits, null, 2));
+    await writeFile("src/scripts/data/user-sig-permits.json", JSON.stringify(this.userSigPermits, null, 2));
 
     // process all permits
-    await this.leaderboard(userPermitArray);
+    await this.leaderboard(this.userPermits);
     clearInterval(loader);
 
-    console.log(`[UserBlockTxParser] Finished processing ${Object.keys(userPermitArray).length} users.`);
-
-    return userPermitArray;
+    console.log(`[UserBlockTxParser] Finished processing ${Object.keys(this.userPermits).length} users.`);
   }
 
   async leaderboard(data: Record<string, Decoded[]>) {
@@ -122,10 +84,7 @@ export class UserBlockTxParser {
       const permits = userPermits[user as keyof typeof userPermits];
       let score = 0;
       for (const permit of permits) {
-        let amount = permit.permitted.amount.hex;
-
-        if (!amount) amount = permit.permitted.amount._hex;
-        if (!amount) continue;
+        const amount = permit.permitted.amount;
 
         score += parseFloat(formatUnits(BigInt(amount), 18));
       }
@@ -137,7 +96,7 @@ export class UserBlockTxParser {
     // reduce to object
     // write to file
     await writeFile(
-      "src/scripts/data/blockscan-leaderboard.json",
+      "src/scripts/data/user-tx-leaderboard.json",
       JSON.stringify(
         Object.entries(leaderboard)
           .sort((a, b) => b[1] - a[1])
@@ -148,93 +107,57 @@ export class UserBlockTxParser {
     );
   }
 
-  async processPermit2(userWallets: (string | undefined)[]): Promise<Record<string, Decoded[]>> {
-    const userPermits: Record<string, Decoded[]> = {};
-    const permit2 = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
-    const methodId = "0x30f28b7a";
+  async batcher() {
+    const batches = {
+      permit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3".toLowerCase(),
+      // previous and current UBQ wallet addresses
+      owners: UBQ_OWNERS,
+      users: this.userWallets,
+    };
 
-    const gtxs = await this.getGnosisTxs(permit2);
-    const etxs = await this.getEthTxs(permit2);
+    for (const [target, batch] of Object.entries(batches)) {
+      const shouldUseFrom = target === "permit2";
 
-    const gnosisPermitLogs = gtxs.result.filter((tx: { input: string }) => tx.input.startsWith(methodId));
-    const ethPermitLogs = etxs.result.filter((tx: { input: string }) => tx.input.startsWith(methodId));
+      await this.processBatch(batch, shouldUseFrom);
+    }
+  }
 
-    const permitLogs = [...gnosisPermitLogs, ...ethPermitLogs];
+  async processBatch(address: string | (string | undefined)[] | string[], from: boolean) {
+    let gtxs: ScanResponse[] = [];
+    let etxs: ScanResponse[] = [];
+
+    if (!Array.isArray(address)) {
+      gtxs = await this.getGnosisTxs(address);
+      etxs = await this.getEthTxs(address);
+    } else {
+      for (const addr of address) {
+        if (!addr) continue;
+
+        const _gtxs = await this.getGnosisTxs(addr);
+        const _etxs = await this.getEthTxs(addr);
+
+        gtxs.push(..._gtxs);
+        etxs.push(..._etxs);
+      }
+    }
+
+    const permitLogs = [...gtxs, ...etxs];
+
+    const indexer = from ? "from" : "to";
 
     for (const log of permitLogs) {
-      // from hunter to permit2 using permit2 tx history
-      const from = log.from.toLowerCase();
-      if (!userWallets.includes(from)) continue;
-      const decoded = this.decodePermit(log.input);
-      decoded.txHash = log.hash;
+      const indexerAddress = log[indexer].toLowerCase();
+      if (!this.userWallets.includes(indexerAddress)) continue;
+      const decoded = this.decodePermit(log);
+      const sig = decoded.signature.toLowerCase();
 
-      if (!userPermits[from]) {
-        userPermits[from] = [];
+      if (!this.userPermits[indexerAddress]) {
+        this.userPermits[indexerAddress] = [];
       }
 
-      userPermits[from].push(decoded);
+      this.userSigPermits[sig] = decoded;
+      this.userPermits[indexerAddress].push(decoded);
     }
-
-    return userPermits;
-  }
-
-  async processOwners(userWallets: (string | undefined)[], owners: string[]): Promise<Record<string, Decoded[]>> {
-    const userPermits: Record<string, Decoded[]> = {};
-    for (const owner of owners) {
-      const gtxs = await this.getGnosisTxs(owner);
-      const etxs = await this.getEthTxs(owner);
-
-      const methodId = "0x30f28b7a";
-      const gnosisPermitLogs = gtxs.result.filter((tx: { input: string }) => tx.input.startsWith(methodId));
-      const ethPermitLogs = etxs.result.filter((tx: { input: string }) => tx.input.startsWith(methodId));
-      const permitLogs = [...gnosisPermitLogs, ...ethPermitLogs];
-
-      for (const log of permitLogs) {
-        // from ubq to hunter
-        const to = log.to.toLowerCase();
-        if (!userWallets.includes(to)) continue;
-        const decoded = this.decodePermit(log.input);
-        decoded.txHash = log.hash;
-        if (!userPermits[to]) {
-          userPermits[to] = [];
-        }
-
-        userPermits[to].push(decoded);
-      }
-    }
-
-    return userPermits;
-  }
-
-  async processUsers(idToWalletMap: Map<number, string>, users: User[]): Promise<Record<string, Decoded[]>> {
-    const userPermits: Record<string, Decoded[]> = {};
-    for (const user of users) {
-      const userWallet = idToWalletMap.get(user.wallet_id)?.toLowerCase();
-      if (!userWallet) continue;
-
-      const gtxs = await this.getGnosisTxs(userWallet);
-      const etxs = await this.getEthTxs(userWallet);
-
-      const methodId = "0x30f28b7a";
-      const gnosisPermitLogs = gtxs.result.filter((tx: { input: string }) => tx.input.startsWith(methodId));
-      const ethPermitLogs = etxs.result.filter((tx: { input: string }) => tx.input.startsWith(methodId));
-      const permitLogs = [...gnosisPermitLogs, ...ethPermitLogs];
-
-      for (const log of permitLogs) {
-        // from hunter to permit2 using hunter tx history
-        if (log.from.toLowerCase() !== userWallet) continue;
-        const decoded = this.decodePermit(log.input);
-        decoded.txHash = log.hash;
-
-        if (!userPermits[userWallet]) {
-          userPermits[userWallet] = [];
-        }
-
-        userPermits[userWallet].push(decoded);
-      }
-    }
-
-    return userPermits;
   }
 
   async getBlockNumbers() {
@@ -244,20 +167,39 @@ export class UserBlockTxParser {
     return { eth, gnosis };
   }
 
-  async getEthTxs(address: string) {
-    const toBlock = (await this.getBlockNumbers()).eth;
-    const fromBlock = 13373290; // 2.5yrs ago
+  async getEthTxs(address: string, from?: number, to?: number, filter = true): Promise<ScanResponse[]> {
+    const toBlock = to ?? (await this.getBlockNumbers()).eth;
+    const fromBlock = from ?? 10373290; // ~3yrs ago 29/05/2024
     const url = `https://api.etherscan.io/api?module=account&action=txlist&address=${address}&startblock=${fromBlock}&endblock=${toBlock}&page=1&offset=1000&sort=asc&apikey=${this.etherscanApiKey}`;
-    const response = await fetch(url);
-    return await response.json();
+    const response = await (await fetch(url)).json();
+    const methodId = "0x30f28b7a";
+
+    if (response.result === "Max rate limit reached") {
+      console.log("Rate limit reached, waiting 3s before retrying...");
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      return this.getEthTxs(address, from, to, filter);
+    }
+
+    if (!filter) return response.result as ScanResponse[];
+    return response.result.filter((tx: ScanResponse) => tx.input.startsWith(methodId)) as ScanResponse[];
   }
 
-  async getGnosisTxs(address: string) {
-    const toBlock = (await this.getBlockNumbers()).gnosis;
-    const fromBlock = 18349006; // 2.5yrs ago
+  async getGnosisTxs(address: string, from?: number, to?: number, filter = true): Promise<ScanResponse[]> {
+    const toBlock = to ?? (await this.getBlockNumbers()).gnosis;
+    const fromBlock = from ?? 15349006; // ~3yrs ago 29/05/2024
+
     const url = `https://api.gnosisscan.io/api?module=account&action=txlist&address=${address}&startblock=${fromBlock}&endblock=${toBlock}&page=1&offset=1000&sort=asc&apikey=${this.gnosisApiKey}`;
-    const response = await fetch(url);
-    return await response.json();
+    const response = await (await fetch(url)).json();
+    const methodId = "0x30f28b7a";
+
+    if (response.result === "Max rate limit reached") {
+      console.log("Rate limit reached, waiting 3s before retrying...");
+      await new Promise((resolve) => setTimeout(resolve, 3000));
+      return this.getGnosisTxs(address, from, to, filter);
+    }
+
+    if (!filter) return response.result as ScanResponse[];
+    return response.result.filter((tx: ScanResponse) => tx.input.startsWith(methodId)) as ScanResponse[];
   }
 
   async getSupabaseData(): Promise<{ walletToIdMap: Map<string, number>; idToWalletMap: Map<number, string>; users: User[] }> {
@@ -273,8 +215,9 @@ export class UserBlockTxParser {
     }
 
     for (const wallet of data) {
-      walletToIdMap.set(wallet.address, wallet.id);
-      idToWalletMap.set(wallet.id, wallet.address);
+      const addr = wallet.address.toLowerCase();
+      walletToIdMap.set(addr, wallet.id);
+      idToWalletMap.set(wallet.id, addr);
     }
 
     const { data: users, error: rr } = await this.sb.from("users").select("*").in("wallet_id", Array.from(idToWalletMap.keys()));
@@ -284,18 +227,34 @@ export class UserBlockTxParser {
       return { walletToIdMap, idToWalletMap, users: [] };
     }
 
+    this.users = users;
+
     return { walletToIdMap, idToWalletMap, users };
   }
 
-  decodePermit(data: ethers.utils.BytesLike): Decoded {
-    const decodedData = this.permitDecoder.decodeFunctionData("permitTransferFrom", data);
+  decodePermit(data: ScanResponse): Decoded {
+    const decodedData: ethers.utils.Result = this.permitDecoder.decodeFunctionData("permitTransferFrom", data.input);
+
+    const token = decodedData[0][0][0];
+    const to = decodedData[1][0];
+    const amount = decodedData[1][1]?.hex ?? decodedData[1][1]?._hex;
+    const owner = decodedData[2];
+    const signature = decodedData[3];
+    const nonce = decodedData[0][1];
+
+    const strung = BigNumber.from(nonce).toString();
 
     return {
+      nonce: strung,
+      signature,
+      permitOwner: owner,
+      to,
       permitted: {
-        token: decodedData[0][0].token,
-        amount: decodedData[0][0].amount,
+        amount,
+        token,
       },
-      nonce: decodedData[3],
+      txHash: data.hash,
+      blockTimestamp: new Date(parseInt(data.timeStamp) * 1000),
     };
   }
 
