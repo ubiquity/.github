@@ -12,7 +12,7 @@ type IssueComment = {
     number: number;
     author: { login: string };
     assignees: { edges: { node: { login: string } }[] };
-    comments: { edges: { node: Comment }[] };
+    comments: { edges: { node: Comment }[]; pageInfo: { hasNextPage: boolean; endCursor: string } };
   };
 };
 
@@ -29,7 +29,8 @@ export type IssueOut = {
   issueCreator: string;
   issueAssignee: string;
   issueNumber: number;
-  commentTimestamp: string;
+  repoName: string;
+  timestamp: string;
   claimUrl: string;
   permit: PermitDetails;
 };
@@ -44,7 +45,8 @@ export type IssueOut = {
  *
  * The permits are then parsed and stored in two files:
  * - paid-out-repo-issue-permits.json: A list of permits by repo and issue number.
- * - paid-out-user-permits.json: A list of permits by user.
+ * - paid-out-user-permits.json: A list of permits by username.
+ * - paid-out-wallet-permits.json: A list of permits by wallet.
  *
  *
  * Most fruitful of the three methods.
@@ -58,11 +60,10 @@ export class PaidIssueParser {
 
   // repo -> issueNumber -> IssueOut[]
   repoPaymentInfo: Record<string, Record<number, IssueOut[]>> = {};
-  // username -> IssueOut[]
-  userPaymentInfo: Record<string, Set<IssueOut>> = {};
-
+  // Signature -> IssueOut
+  sigPaymentInfo: Record<string, IssueOut> = {};
   // wallet -> IssueOut[]
-  walletPaymentInfo: Record<string, Set<IssueOut>> = {};
+  walletPaymentInfo: Record<string, IssueOut[]> = {};
 
   constructor() {}
 
@@ -71,10 +72,8 @@ export class PaidIssueParser {
     await this.getSupabaseData();
     await this.processOrgAndRepos();
 
-    const outFile = Object.entries(this.userPaymentInfo).map(([key, value]) => ({ [key]: Array.from(value) }));
-
     await writeFile("src/scripts/data/paid-out-repo-issue-permits.json", JSON.stringify(this.repoPaymentInfo, null, 2));
-    await writeFile("src/scripts/data/scripts/data/paid-out-user-permits.json", JSON.stringify(outFile, null, 2));
+    await writeFile("src/scripts/data/paid-out-sig-permits.json", JSON.stringify(this.sigPaymentInfo, null, 2));
     await writeFile("src/scripts/data/paid-out-wallet-permits.json", JSON.stringify(this.walletPaymentInfo, null, 2));
 
     await this.leaderboard();
@@ -84,7 +83,8 @@ export class PaidIssueParser {
 
     return {
       repoPaymentInfo: this.repoPaymentInfo,
-      userPaymentInfo: this.userPaymentInfo,
+      sigPaymentInfo: this.sigPaymentInfo,
+      walletPaymentInfo: this.walletPaymentInfo,
     };
   }
 
@@ -92,12 +92,38 @@ export class PaidIssueParser {
     for (const org of orgs) {
       const repos = await this.getPublicRepos(org);
 
-      for (const repo of repos) {
+      for await (const repo of repos) {
         if (repo.isArchived) continue;
         this.log(`Processing ${org}/${repo.name}`);
-        await this.fetchAndProcessRepoComments(org, repo.name);
+
+        const shouldRetry = await this._processOrgAndRepos(org, repo);
+
+        if (shouldRetry) {
+          await this._processOrgAndRepos(org, repo);
+        }
       }
     }
+  }
+
+  async _processOrgAndRepos(org: string, repo: Repositories) {
+    try {
+      await this.fetchAndProcessRepoComments(org, repo.name);
+    } catch (e) {
+      if (e instanceof Error && e.message.includes("rate limit")) {
+        this.log("Rate limit exceeded, pausing...");
+
+        const rateLimit = await this.octokit.rateLimit.get();
+        const resetTime = rateLimit.data.resources.core.reset * 1000;
+        const waitTime = resetTime - Date.now();
+
+        await new Promise((resolve) => setTimeout(resolve, waitTime));
+        return true;
+      } else {
+        // Rethrow error if it's not a rate limit error
+        throw e;
+      }
+    }
+    return false;
   }
 
   async leaderboard() {
@@ -105,8 +131,8 @@ export class PaidIssueParser {
 
     const leaderboard: Record<string, number> = {};
 
-    for (const user of Object.keys(this.userPaymentInfo)) {
-      const payments = this.userPaymentInfo[user as keyof typeof this.userPaymentInfo];
+    for (const user of Object.keys(this.walletPaymentInfo)) {
+      const payments = this.walletPaymentInfo[user as keyof typeof this.walletPaymentInfo];
 
       for (const payment of payments) {
         const { permit } = payment;
@@ -182,37 +208,75 @@ export class PaidIssueParser {
 
   async fetchAndProcessRepoComments(org: string, repoName: string) {
     let hasNextPage = true;
-    let cursor = null;
+    let issueCursor = null;
 
-    // paginate through repo issues
-    while (hasNextPage) {
-      // fetch issues and comments
-      const response: GraphQlGitHubResponse = await request(
-        GITHUB_GRAPHQL_API,
-        fetchCommentsQuery,
-        { org, repoName, cursor },
-        { Authorization: `Bearer ${GITHUB_TOKEN}` }
-      );
+    // permits are in the associated repo not the devpool
+    if (repoName === "devpool-directory") return;
 
-      for (const issue of response.repository.issues.edges) {
-        // grab some issue info
-        const issueNumber = issue.node.number;
-        const issueCreator = issue.node.author?.login;
-        const issueAssignee = issue.node.assignees.edges.length > 0 ? issue.node.assignees.edges[0].node?.login : NO_ASSIGNEE;
+    try {
+      // paginate through repo issues
+      while (hasNextPage) {
+        const response: GraphQlGitHubResponse = await request(
+          GITHUB_GRAPHQL_API,
+          fetchCommentsQuery,
+          { org, repoName, cursor: issueCursor },
+          { Authorization: `Bearer ${GITHUB_TOKEN}` }
+        );
 
-        for (const comment of issue.node.comments.edges) {
-          const timestamp = comment.node.createdAt;
-          const body = comment.node.body;
-          if (!this.repoPaymentInfo[repoName]) this.repoPaymentInfo[repoName] = {};
+        // fetch issues and comments
+        for await (const issue of response.repository.issues.edges) {
+          this.log(`${repoName}/#${issue.node.number} `);
+          const issueNumber = issue.node.number;
+          const issueCreator = issue.node.author?.login;
+          const issueAssignee = issue.node.assignees.edges.length > 0 ? issue.node.assignees.edges[0].node?.login : NO_ASSIGNEE;
 
-          await this.parseComment(body, repoName, issueNumber, issueCreator, comment, issueAssignee, timestamp);
+          let hasNextPageComments = true;
+          let commentsCursor = null;
+          let comments: {
+            node: Comment;
+          }[] = [];
+
+          // paginate through issue comments
+          while (hasNextPageComments) {
+            const commentsResponse: GraphQlGitHubResponse = await request(
+              GITHUB_GRAPHQL_API,
+              fetchIssueCommentsQuery,
+              { org, repoName, issueNumber, cursor: commentsCursor },
+              { Authorization: `Bearer ${GITHUB_TOKEN}` }
+            );
+
+            const botComments = commentsResponse.repository.issue.comments.edges.filter(
+              (c) => c.node.author?.login === "ubiquibot" || c.node.author?.login === "pavlovcik" || c.node.author?.login === "0x4007"
+            );
+
+            comments = comments.concat(botComments);
+
+            if (issue.node.number === 752) await writeFile("src/scripts/data/issue-752-comments.json", JSON.stringify(botComments, null, 2));
+
+            for await (const comment of botComments) {
+              const timestamp = comment.node.createdAt;
+              const body = comment.node.body;
+              if (!this.repoPaymentInfo[repoName]) this.repoPaymentInfo[repoName] = {};
+
+              await this.parseComment(body, repoName, issueNumber, issueCreator, comment, issueAssignee, timestamp);
+            }
+
+            hasNextPageComments = commentsResponse.repository.issue.comments.pageInfo.hasNextPage;
+            commentsCursor = commentsResponse.repository.issue.comments.pageInfo.endCursor;
+          }
         }
-      }
 
-      // if there are more pages, paginate
-      hasNextPage = response.repository.issues.pageInfo.hasNextPage;
-      cursor = response.repository.issues.pageInfo.endCursor;
+        hasNextPage = response.repository.issues.pageInfo.hasNextPage;
+        issueCursor = response.repository.issues.pageInfo.endCursor;
+      }
+    } catch (err) {
+      this.log(err);
     }
+    return {
+      repoPaymentInfo: this.repoPaymentInfo,
+      sigPaymentInfo: this.sigPaymentInfo,
+      walletPaymentInfo: this.walletPaymentInfo,
+    };
   }
 
   async parseComment(
@@ -225,10 +289,7 @@ export class PaidIssueParser {
     timestamp: string
   ) {
     // we only want comments from ubiquibot, pavlovcik, and 0x4007
-    if (
-      this.commentContainsPermit(body) &&
-      (comment.node.author?.login === "ubiquibot" || comment.node.author?.login === "pavlovcik" || comment.node.author?.login === "0x4007")
-    ) {
+    if (comment.node.author?.login === "ubiquibot" || comment.node.author?.login === "pavlovcik" || comment.node.author?.login === "0x4007") {
       // if any of the four regexes match
       const paymentInfo = await this.parsePaymentInfo(body);
 
@@ -243,23 +304,25 @@ export class PaidIssueParser {
           continue;
         }
 
-        const { claimUrl, claimantUsername, permit } = _permit;
+        let { permit } = _permit;
+
+        if (Array.isArray(permit)) {
+          permit = permit[0];
+        }
+
         const toPush = {
+          beneficiary: _permit.claimantUsername,
           issueCreator,
           issueAssignee,
           issueNumber,
-          commentTimestamp: timestamp,
-          claimUrl,
+          repoName,
+          timestamp: timestamp,
+          claimUrl: _permit.claimUrl,
           permit,
         };
 
-        // push repo payment info
         this.repoPaymentInfo[repoName][issueNumber].push(toPush);
-
-        if (!this.userPaymentInfo[claimantUsername]) this.userPaymentInfo[claimantUsername] = new Set();
-
-        this.userPaymentInfo[claimantUsername].add(toPush);
-
+        this.sigPaymentInfo[permit.signature.toLowerCase()] = toPush;
         this.addWalletPaymentInfo(toPush);
       }
     }
@@ -269,7 +332,8 @@ export class PaidIssueParser {
     issueCreator: string;
     issueAssignee: string;
     issueNumber: number;
-    commentTimestamp: string;
+    repoName: string;
+    timestamp: string;
     claimUrl: string;
     permit: PermitDetails;
   }) {
@@ -279,13 +343,13 @@ export class PaidIssueParser {
       return;
     }
 
-    const to = transferDetails.to;
+    const to = transferDetails.to.toLowerCase();
 
     if (!this.walletPaymentInfo[to]) {
-      this.walletPaymentInfo[to] = new Set();
+      this.walletPaymentInfo[to] = [];
     }
 
-    this.walletPaymentInfo[to].add(permit);
+    this.walletPaymentInfo[to].push(permit);
   }
 
   /**
@@ -298,7 +362,6 @@ export class PaidIssueParser {
     const match = comment.match(/https:\/\/pay\.ubq\.fi\/?\?claim=[^\s]*/g);
 
     if (!match) {
-      this.log("No claim url found in comment: " + comment);
       return null;
     } else if (match.length === 1) {
       const claimUrl = match[0];
@@ -307,7 +370,6 @@ export class PaidIssueParser {
       const permitData = claimParams.searchParams.get("claim");
 
       if (!permitData) {
-        this.log("No permit data found in claim url: " + claimUrl);
         return null;
       }
       // return an array of one parsed permit
@@ -322,7 +384,6 @@ export class PaidIssueParser {
         const permitData = claimParams.searchParams.get("claim");
 
         if (!permitData) {
-          this.log("No permit data found in claim url: " + claimUrl);
           continue;
         }
 
@@ -395,8 +456,9 @@ export class PaidIssueParser {
     }
 
     for (const wallet of data) {
-      this.walletToIdMap.set(wallet.address, wallet.id);
-      this.idToWalletMap.set(wallet.id, wallet.address);
+      const addr = wallet.address.toLowerCase();
+      this.walletToIdMap.set(addr, wallet.id);
+      this.idToWalletMap.set(wallet.id, addr);
     }
 
     const { data: users, error: rr } = await this.sb.from("users").select("*").in("wallet_id", Array.from(this.idToWalletMap.keys()));
@@ -430,17 +492,15 @@ export class PaidIssueParser {
   }
 
   sanitizeClaimUrl(str: string) {
-    // 37 permits failed to decode, below are the reasons why
-    // `ifs` over `switch`/`else ifs` to ensure all possible sanitizations are applied
+    if (str.includes('%3D"')) {
+      str = str.split('%3D"')[0];
+    }
 
     if (str.includes('%3D&network=100"')) {
       str = str.split('%3D&network=100"')[0];
     }
     if (str.includes('\\">')) {
       str = str.split('\\">')[0];
-    }
-    if (str.includes('%3D"')) {
-      str = str.split('%3D"')[0];
     }
 
     if (str.includes("%3D%3D")) {
@@ -478,7 +538,6 @@ export class PaidIssueParser {
     const sanityCheck = str.match(/[^A-Za-z0-9=]/g);
 
     if (sanityCheck) {
-      this.log("Sanity check failed for permit: " + str);
       return;
     }
 
@@ -551,6 +610,30 @@ const fetchPublicRepoQuery = gql`
                   }
                 }
               }
+            }
+          }
+        }
+      }
+    }
+  }
+`;
+
+const fetchIssueCommentsQuery = gql`
+  query ($org: String!, $repoName: String!, $issueNumber: Int!, $cursor: String) {
+    repository(owner: $org, name: $repoName) {
+      issue(number: $issueNumber) {
+        comments(first: 100, after: $cursor) {
+          pageInfo {
+            hasNextPage
+            endCursor
+          }
+          edges {
+            node {
+              body
+              author {
+                login
+              }
+              createdAt
             }
           }
         }
