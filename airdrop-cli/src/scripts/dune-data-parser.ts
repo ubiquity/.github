@@ -1,4 +1,4 @@
-import { ethers } from "ethers";
+import { BigNumber, ethers } from "ethers";
 import { permit2Abi } from "../abis/permit2Abi";
 import { createClient } from "@supabase/supabase-js";
 import { TX_HASHES } from "./tx-hashes";
@@ -50,31 +50,24 @@ export class DuneDataParser {
     // collect user info
     const { idToWalletMap, users } = await this.getSupabaseData();
     // collect earnings and permits
-    const { earnings, permits } = await this.permitsAndEarnings(users, idToWalletMap);
+    const { earnings, permits, sigMap } = await this.permitsAndEarnings(users, idToWalletMap);
     // pair addresses to nonces
-    const addressToNoncesMap = await this.pairAddrToNonces(permits);
 
     await writeFile("src/scripts/data/dune-earnings.json", JSON.stringify(earnings, null, 2));
     await writeFile("src/scripts/data/dune-permits.json", JSON.stringify(permits, null, 2));
-    await writeFile("src/scripts/data/dune-address-to-nonces.json", JSON.stringify(addressToNoncesMap, null, 2));
+    await writeFile("src/scripts/data/dune-sig-map.json", JSON.stringify(sigMap, null, 2));
 
     clearInterval(loader);
 
     console.log(`[DuneDataParser] Finished processing ${users.length} users`);
 
-    return { earnings, permits, addressToNoncesMap };
+    return { earnings, permits, sigMap };
   }
 
   async permitsAndEarnings(users: User[], idToWalletMap: Map<number, string>) {
     const earnings: Record<string, number> = {};
-    const permits: Record<
-      string,
-      ({
-        date: string;
-        decoded: Decoded | null;
-        tx: Partial<ethers.providers.TransactionResponse>;
-      } | null)[]
-    > = {};
+    const permits: Record<string, Decoded[]> = {};
+    const sigMap: Record<string, Decoded> = {};
 
     for (const user of users) {
       // get wallet address
@@ -87,16 +80,13 @@ export class DuneDataParser {
 
       // calculate total earned
       const totalEarned = txs.reduce((acc, tx) => {
-        const { decoded } = tx;
-        if (!decoded) return acc;
+        if (!tx || !tx.permitted) return acc;
 
-        let amount;
+        const sig = tx.signature;
 
-        // two forms somehow, so we try both
-        amount = decoded.permitted?.amount.hex;
-        if (!amount) amount = decoded.permitted?.amount._hex;
+        if (!sigMap[sig]) sigMap[sig] = tx;
 
-        const value = parseFloat(formatUnits(BigInt(amount?.toString() ?? "0"), 18));
+        const value = parseFloat(formatUnits(BigInt(tx.permitted.amount), 18));
 
         return acc + value;
       }, 0);
@@ -107,43 +97,7 @@ export class DuneDataParser {
       earnings[wallet] = totalEarned;
     }
 
-    return { earnings, permits };
-  }
-
-  async pairAddrToNonces(
-    permits: Record<
-      string,
-      ({
-        date: string;
-        decoded: Decoded | null;
-        tx: Partial<ethers.providers.TransactionResponse>;
-      } | null)[]
-    >
-  ) {
-    const addressToNoncesMap: Map<string, { nonce: string; date: string | undefined }[]> = new Map();
-
-    // for each wallet, get the nonces from the permits
-    for (const [wallet, txs] of Object.entries(permits)) {
-      const nonces = txs
-        .map((tx) => {
-          // pull the decoded permit
-          const decoded = tx?.decoded;
-          if (!decoded) return null;
-
-          // get the nonce
-          const { nonce } = decoded;
-
-          // return the nonce and date
-          return { nonce, date: tx?.date };
-        })
-        // filter out nulls
-        .filter((item) => item !== null) as { nonce: string; date: string }[];
-
-      // assign the nonces to the wallet
-      addressToNoncesMap.set(wallet, nonces);
-    }
-
-    return addressToNoncesMap;
+    return { earnings, permits, sigMap };
   }
 
   async getUserTransactions(wallet: string) {
@@ -157,11 +111,7 @@ export class DuneDataParser {
     const userTxHashes = TX_HASHES[wallet.toLowerCase()];
     let count = userTxHashes?.length;
 
-    const txs: {
-      tx: Partial<ethers.providers.TransactionResponse>;
-      date: string;
-      decoded: Decoded;
-    }[] = [];
+    const txs: Decoded[] = [];
 
     if (!count) {
       console.error("No tx hashes found for wallet");
@@ -177,23 +127,10 @@ export class DuneDataParser {
       if (!tx) tx = await this.ethProvider.getTransaction(txHash.hash);
       if (!tx || !tx.data) continue;
 
-      const { data, hash, from, to, chainId, blockHash } = tx;
-      let timestamp; // get timestamp from the chain the tx was on when it was mined
-
-      if (blockHash && chainId === 1) {
-        timestamp = (await this.ethProvider.getBlock(blockHash))?.timestamp;
-      } else if (blockHash && chainId === 100) {
-        timestamp = (await this.gnosisProvider.getBlock(blockHash))?.timestamp;
-      }
-
       // decode permit data
-      const decoded = this.decodePermit(data);
+      const decoded = await this.decodePermit(tx);
 
-      txs.push({
-        decoded,
-        tx: { data, hash, timestamp, from, to },
-        date: timestamp ? new Date(timestamp * 1000).toISOString() : "N/A",
-      });
+      txs.push(decoded);
     }
 
     return txs;
@@ -211,8 +148,9 @@ export class DuneDataParser {
     }
 
     for (const wallet of data) {
-      walletToIdMap.set(wallet.address, wallet.id);
-      idToWalletMap.set(wallet.id, wallet.address);
+      const addr = wallet.address.toLowerCase();
+      walletToIdMap.set(addr, wallet.id);
+      idToWalletMap.set(wallet.id, addr);
     }
 
     const { data: users, error: rr } = await this.sb.from("users").select("*").in("wallet_id", Array.from(idToWalletMap.keys()));
@@ -225,15 +163,36 @@ export class DuneDataParser {
     return { walletToIdMap, idToWalletMap, users };
   }
 
-  decodePermit(data: ethers.utils.BytesLike): Decoded {
-    const decodedData = this.permitDecoder.decodeFunctionData("permitTransferFrom", data);
+  async decodePermit(tx: ethers.providers.TransactionResponse): Promise<Decoded> {
+    const decodedData: ethers.utils.Result = this.permitDecoder.decodeFunctionData("permitTransferFrom", tx.data);
+
+    const { blockHash, chainId } = tx;
+    let timestamp; // get timestamp from the chain the tx was on when it was mined
+
+    if (blockHash && chainId === 1) {
+      timestamp = (await this.ethProvider.getBlock(blockHash))?.timestamp;
+    } else if (blockHash && chainId === 100) {
+      timestamp = (await this.gnosisProvider.getBlock(blockHash))?.timestamp;
+    }
+
+    const token = decodedData[0][0][0];
+    const to = decodedData[1][0];
+    const amount = decodedData[1][1]?.hex ?? decodedData[1][1]?._hex;
+    const owner = decodedData[2];
+    const signature = decodedData[3];
+    const nonce = decodedData[0][1];
 
     return {
+      nonce: BigNumber.from(nonce).toString().toLowerCase(),
+      signature,
+      permitOwner: owner,
+      to,
       permitted: {
-        token: decodedData[0][0].token,
-        amount: decodedData[0][0].amount,
+        amount,
+        token,
       },
-      nonce: decodedData[3],
+      txHash: tx.hash,
+      blockTimestamp: new Date((timestamp ?? 0) * 1000),
     };
   }
 
@@ -252,4 +211,6 @@ export class DuneDataParser {
 //   await parser.run();
 // }
 
-// main().finally(() => process.exit(0));
+// main()
+//   .catch(console.error)
+//   .finally(() => process.exit(0));
