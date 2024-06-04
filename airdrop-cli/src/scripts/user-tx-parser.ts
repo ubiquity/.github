@@ -1,7 +1,7 @@
 import { BigNumber, ethers } from "ethers";
 import { permit2Abi } from "../abis/permit2Abi";
 import { Decoded, ScanResponse, User } from "../types";
-import { UBQ_OWNERS } from "../utils/constants";
+import { PERMIT2_ADDRESS, UBQ_OWNERS } from "../utils/constants";
 import { getSupabaseData, loader } from "./utils";
 import { writeFile } from "fs/promises";
 /**
@@ -57,7 +57,7 @@ export class UserBlockTxParser {
 
   async batcher() {
     const batches = {
-      permit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3".toLowerCase(),
+      permit2: PERMIT2_ADDRESS.toLowerCase(),
       owners: UBQ_OWNERS,
       users: this.userWallets,
     };

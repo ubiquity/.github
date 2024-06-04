@@ -32,9 +32,6 @@
   "dependencies": {
     "@octokit/rest": "^20.1.1",
     "@supabase/supabase-js": "^2.43.2",
-    "axios": "^1.6.7",
-    "clime": "^0.5.16",
-    "decimal.js": "^10.4.3",
     "dotenv": "^16.4.2",
     "ethers": "^5.7.2",
     "graphql": "^16.8.1",
@@ -52,7 +49,6 @@
     "@typescript-eslint/eslint-plugin": "^6.13.1",
     "@typescript-eslint/parser": "^6.13.1",
     "cspell": "^8.3.2",
-    "esbuild": "^0.19.8",
     "eslint": "^8.54.0",
     "eslint-config-prettier": "^9.0.0",
     "eslint-plugin-prettier": "^5.0.1",
