@@ -1,3 +1,4 @@
+/* eslint-disable sonarjs/no-duplicate-string */
 function format(strings: string[]) {
   const hashes: Record<string, { hash: string; date: string }[]> = {};
 

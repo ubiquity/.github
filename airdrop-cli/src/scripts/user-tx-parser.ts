@@ -23,6 +23,7 @@ export class UserBlockTxParser {
   users: User[] = [];
   userSigPermits: Record<string, Decoded> = {};
 
+  // cspell: disable-next-line
   constructor(gnosisApiKey = "WR9YP2CY3NG2WRX8FN5DCNKKIAGIIN83YN", etherscanApiKey = "JPHWVVUBAIP1UVQZSSDKV73YX48I2M7SWV") {
     this.gnosisApiKey = gnosisApiKey;
     this.etherscanApiKey = etherscanApiKey;

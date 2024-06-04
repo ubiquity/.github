@@ -20,14 +20,8 @@
     "skipDefaultLibCheck": true,
     "newLine": "LF",
     "outDir": "dist",
-    "plugins": [],
+    "plugins": []
   },
-  "include": [
-    "src",
-    "src/commands/unspent.ts",
-  ],
-  "exclude": [
-    "node_modules",
-    "dist"
-  ]
+  "include": ["src", "src/commands/unspent.ts"],
+  "exclude": ["node_modules", "dist"]
 }

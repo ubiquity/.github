@@ -4,7 +4,7 @@ import { DuneDataParser } from "./dune-data-parser";
 // import { PopulateDB } from "./populate-db";
 import { Decoded, FinalData, IssueOut, PermitEntry, ScanResponse, User } from "../types";
 import { writeFile } from "fs/promises";
-import { Tokens, UBQ_OWNERS } from "../utils/constants";
+import { TOKENS, UBQ_OWNERS } from "../utils/constants";
 import { ethers } from "ethers";
 import { formatUnits } from "viem";
 import { getSupabaseData } from "./utils";
@@ -14,8 +14,8 @@ import { getSupabaseData } from "./utils";
 // import USER_SIGS from "./data/user-tx-sigs.json";
 
 const tokens = {
-  [Tokens.WXDAI]: 1, // permits in DB exist with WXDAI as token_id == 1
-  [Tokens.DAI]: 2, // since no other tokens as of yet, we can assume DAI is 2
+  [TOKENS.WXDAI]: 1, // permits in DB exist with WXDAI as token_id == 1
+  [TOKENS.DAI]: 2, // since no other tokens as of yet, we can assume DAI is 2
 };
 
 /**

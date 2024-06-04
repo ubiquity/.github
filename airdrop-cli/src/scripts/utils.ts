@@ -1,5 +1,6 @@
 import { createClient } from "@supabase/supabase-js";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "../utils/constants";
+import { User } from "../types";
 
 const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
