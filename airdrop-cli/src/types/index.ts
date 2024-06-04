@@ -6,6 +6,7 @@ export interface PaymentInfo {
   payee?: string;
   type?: string;
   url: string;
+  timestamp: string;
 }
 
 export interface Repositories {
@@ -39,12 +40,14 @@ export interface DebugData extends PaymentInfo {
   permit: string;
   issueCreator: string;
   typeOfMatch: string;
+  timestamp: string;
 }
 
 export interface Permits {
   repoName: string;
   issueNumber: number;
   url: string;
+  timestamp: string;
 }
 
 export interface PermitDetails {
@@ -63,3 +66,60 @@ export interface PermitDetails {
   owner: string;
   signature: string;
 }
+
+export type Decoded = {
+  reward: PermitDetails;
+  txHash: string;
+  blockTimestamp: Date | string;
+};
+
+export type IssueOut = {
+  issueCreator: string;
+  issueAssignee: string;
+  issueNumber: number;
+  repoName: string;
+  timestamp: string;
+  claimUrl: string;
+  reward: PermitDetails;
+};
+
+export type FinalData = Decoded & IssueOut;
+
+export type User = {
+  id: number;
+  wallet_id: number;
+};
+
+export type ScanResponse = {
+  blockNumber: string;
+  timeStamp: string;
+  hash: string;
+  nonce: string;
+  blockHash: string;
+  transactionIndex: string;
+  from: string;
+  to: string;
+  value: string;
+  gas: string;
+  gasPrice: string;
+  isError: string;
+  txreceipt_status: string;
+  input: string;
+  contractAddress: string;
+  cumulativeGasUsed: string;
+  gasUsed: string;
+  confirmations: string;
+  methodId: string;
+  functionName: string;
+};
+
+export type PermitEntry = {
+  amount: string;
+  nonce: string;
+  deadline: string;
+  signature: string;
+  token_id: string;
+  partner_id: string;
+  beneficiary_id: number;
+  transaction: string;
+};

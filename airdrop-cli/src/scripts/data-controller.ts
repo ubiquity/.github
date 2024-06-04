@@ -9,9 +9,9 @@ import { ethers } from "ethers";
 import { formatUnits } from "viem";
 import { getSupabaseData } from "./utils";
 
-import DUNE_SIGS from "./data/dune-sigs.json";
-import ISSUE_SIGS from "./data/issue-sigs.json";
-import USER_SIGS from "./data/user-tx-sigs.json";
+// import DUNE_SIGS from "./data/dune-sigs.json";
+// import ISSUE_SIGS from "./data/issue-sigs.json";
+// import USER_SIGS from "./data/user-tx-sigs.json";
 
 const tokens = {
   [Tokens.WXDAI]: 1, // permits in DB exist with WXDAI as token_id == 1
@@ -260,6 +260,7 @@ export class DataController {
         if (permit.txHash) {
           claimedLeaderboard[user] += formattedAmount;
         }
+
         const entry = this.createPermitEntry(permit);
         newFinal[user].push(permit);
         dbEntries[repoName].push(entry);
