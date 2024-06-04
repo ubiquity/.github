@@ -2,23 +2,13 @@ import { BigNumber, ethers } from "ethers";
 import { permit2Abi } from "../abis/permit2Abi";
 import { createClient } from "@supabase/supabase-js";
 import { TX_HASHES } from "./tx-hashes";
-import { formatUnits } from "viem";
-import { writeFile } from "fs/promises";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "../utils/constants";
 import { Decoded, User } from "../types";
+import { getSupabaseData, loader } from "./utils";
 
 /**
  * Collects permits using tx hashes collected from Dune Analytics.
- * Hashes collected where "from" === Permit2 address and "to" === Hunter address.
- *
- * The permits are then decoded and the nonces are paired with the wallet address.
- *
- * The earnings are calculated by summing the amounts from the permits.
- *
- * Outputs:
- * - dune-earnings.json: A leaderboard of earnings by wallet address.
- * - dune-permits.json: A list of permits by wallet address.
- * - dune-address-to-nonces.json: A list of nonces by wallet address.
+ * Hashes collected where "from" === Hunter address and "to" === Permit2 address.
  *
  * Least fruitful of the three methods.
  */
@@ -28,6 +18,7 @@ export class DuneDataParser {
   gnosisProvider: ethers.providers.WebSocketProvider;
   ethProvider: ethers.providers.WebSocketProvider;
   sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  sigMap: Record<string, Decoded> = {};
 
   constructor() {
     this.permitDecoder = new ethers.utils.Interface(permit2Abi);
@@ -45,66 +36,37 @@ export class DuneDataParser {
   }
 
   async run() {
-    const loader = this.loader();
+    const loader_ = loader();
+    const { idToWalletMap, users } = await getSupabaseData(this.sb);
+    await this.gatherPermits(users, idToWalletMap);
 
-    // collect user info
-    const { idToWalletMap, users } = await this.getSupabaseData();
-    // collect earnings and permits
-    const { earnings, permits, sigMap } = await this.permitsAndEarnings(users, idToWalletMap);
-    // pair addresses to nonces
-
-    await writeFile("src/scripts/data/dune-earnings.json", JSON.stringify(earnings, null, 2));
-    await writeFile("src/scripts/data/dune-permits.json", JSON.stringify(permits, null, 2));
-    await writeFile("src/scripts/data/dune-sig-map.json", JSON.stringify(sigMap, null, 2));
-
-    clearInterval(loader);
+    clearInterval(loader_);
 
     console.log(`[DuneDataParser] Finished processing ${users.length} users`);
-
-    return { earnings, permits, sigMap };
   }
 
-  async permitsAndEarnings(users: User[], idToWalletMap: Map<number, string>) {
-    const earnings: Record<string, number> = {};
-    const permits: Record<string, Decoded[]> = {};
-    const sigMap: Record<string, Decoded> = {};
-
+  async gatherPermits(users: User[], idToWalletMap: Map<number, string>) {
     for (const user of users) {
-      // get wallet address
       const wallet = idToWalletMap.get(user.wallet_id)?.toLowerCase();
       if (!wallet) continue;
 
-      // use wallet to get transactions
       const txs = await this.getUserTransactions(wallet);
       if (!txs || !txs.length) continue;
 
-      // calculate total earned
-      const totalEarned = txs.reduce((acc, tx) => {
-        if (!tx || !tx.permitted) return acc;
+      txs.map((tx) => {
+        if (!tx || !tx.permitted) return;
 
-        const sig = tx.signature;
+        const sig = tx.signature.toLowerCase();
 
-        if (!sigMap[sig]) sigMap[sig] = tx;
-
-        const value = parseFloat(formatUnits(BigInt(tx.permitted.amount), 18));
-
-        return acc + value;
-      }, 0);
-
-      console.log(`Total earned by ${wallet}: ${totalEarned}`);
-
-      permits[wallet] = txs;
-      earnings[wallet] = totalEarned;
+        if (!this.sigMap[sig]) {
+          this.sigMap[sig] = tx;
+        }
+      });
     }
-
-    return { earnings, permits, sigMap };
   }
 
   async getUserTransactions(wallet: string) {
-    if (!wallet) {
-      console.error("No wallet provided");
-      return null;
-    }
+    if (!wallet) return null;
     console.info(`Processing wallet: ${wallet}`);
 
     // using the txhashes collected using Dune Analytics
@@ -112,13 +74,8 @@ export class DuneDataParser {
     let count = userTxHashes?.length;
 
     const txs: Decoded[] = [];
+    if (!count) return null;
 
-    if (!count) {
-      console.error("No tx hashes found for wallet");
-      return null;
-    }
-
-    // loop through tx hashes and get the data
     while (count > 0) {
       const txHash = userTxHashes[count - 1];
       count--;
@@ -127,47 +84,18 @@ export class DuneDataParser {
       if (!tx) tx = await this.ethProvider.getTransaction(txHash.hash);
       if (!tx || !tx.data) continue;
 
-      // decode permit data
       const decoded = await this.decodePermit(tx);
-
       txs.push(decoded);
     }
 
     return txs;
   }
 
-  async getSupabaseData(): Promise<{ walletToIdMap: Map<string, number>; idToWalletMap: Map<number, string>; users: User[] }> {
-    const walletToIdMap = new Map<string, number>();
-    const idToWalletMap = new Map<number, string>();
-
-    const { data, error } = await this.sb.from("wallets").select("address, id");
-
-    if (error || !data?.length) {
-      console.error(error);
-      return { walletToIdMap, idToWalletMap, users: [] };
-    }
-
-    for (const wallet of data) {
-      const addr = wallet.address.toLowerCase();
-      walletToIdMap.set(addr, wallet.id);
-      idToWalletMap.set(wallet.id, addr);
-    }
-
-    const { data: users, error: rr } = await this.sb.from("users").select("*").in("wallet_id", Array.from(idToWalletMap.keys()));
-
-    if (rr || !users?.length) {
-      console.error(rr);
-      return { walletToIdMap, idToWalletMap, users: [] };
-    }
-
-    return { walletToIdMap, idToWalletMap, users };
-  }
-
   async decodePermit(tx: ethers.providers.TransactionResponse): Promise<Decoded> {
     const decodedData: ethers.utils.Result = this.permitDecoder.decodeFunctionData("permitTransferFrom", tx.data);
 
     const { blockHash, chainId } = tx;
-    let timestamp; // get timestamp from the chain the tx was on when it was mined
+    let timestamp;
 
     if (blockHash && chainId === 1) {
       timestamp = (await this.ethProvider.getBlock(blockHash))?.timestamp;
@@ -194,15 +122,6 @@ export class DuneDataParser {
       txHash: tx.hash,
       blockTimestamp: new Date((timestamp ?? 0) * 1000),
     };
-  }
-
-  loader() {
-    const steps = ["|", "/", "-", "\\"];
-    let i = 0;
-    return setInterval(() => {
-      process.stdout.write(`\r${steps[i++]}`);
-      i = i % steps.length;
-    }, 100);
   }
 }
 
