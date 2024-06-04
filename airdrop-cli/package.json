@@ -21,6 +21,10 @@
     "cli:single": "npx tsx src/single/cli-entry.ts",
     "cli:unspent": "npx tsx src/unspent/cli-entry.ts",
     "cli:help": "npx tsx src/help/cli-entry.ts",
+    "dune": "npx tsx src/scripts/dune-data-parser.ts",
+    "issue": "npx tsx src/scripts/paid-issue-parser.ts",
+    "userTx": "npx tsx src/scripts/user-tx-parser.ts",
+    "all": "npx tsx src/scripts/data-controller.ts",
     "test": "npx jest"
   },
   "keywords": [

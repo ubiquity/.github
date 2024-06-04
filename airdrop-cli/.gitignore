@@ -11,5 +11,5 @@ static/dist
 dist
 *.csv
 !all_repos_contributors.csv
-
+scripts/data/*
 debug/repos/*
