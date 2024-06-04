@@ -1,17 +1,15 @@
 import { request, gql } from "graphql-request";
-import { PermitDetails, Repositories, User } from "../types";
+import { IssueOut, PermitDetails, Repositories, User } from "../types";
 import dotenv from "dotenv";
-import { createClient } from "@supabase/supabase-js";
 import { Octokit } from "@octokit/rest";
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from "../utils/constants";
 import { getSupabaseData, loader } from "./utils";
+import { writeFile } from "fs/promises";
 
 dotenv.config();
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN || "";
 
 const GITHUB_GRAPHQL_API = "https://api.github.com/graphql";
-const base64Regex = /[A-Za-z0-9+/=]+/g;
 
 const orgs = ["Ubiquity", "ubiquibot"];
 
@@ -29,7 +27,6 @@ export class PaidIssueParser {
   idToWalletMap = new Map<number, string>();
   users: User[] | null = [];
   octokit = new Octokit({ auth: GITHUB_TOKEN });
-  sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
   // repo -> issueNumber -> IssueOut[]
   repoPaymentInfo: Record<string, Record<number, IssueOut[]>> = {};
@@ -40,7 +37,7 @@ export class PaidIssueParser {
 
   async run() {
     const loader_ = loader();
-    const { idToWalletMap: idWalletMap, users: _users, walletToIdMap: walletMap } = await getSupabaseData(this.sb);
+    const { idToWalletMap: idWalletMap, users: _users, walletToIdMap: walletMap } = await getSupabaseData();
 
     this.idToWalletMap = idWalletMap;
     this.users = _users;
@@ -50,7 +47,7 @@ export class PaidIssueParser {
 
     clearInterval(loader_);
     this.log(`[PaidIssueParser] Finished processing ${Object.keys(this.repoPaymentInfo).length} repos`);
-
+    await writeFile("src/scripts/data/issue-sigs.json", JSON.stringify(this.sigPaymentInfo, null, 2));
     return {
       repoPaymentInfo: this.repoPaymentInfo,
       sigPaymentInfo: this.sigPaymentInfo,
@@ -59,6 +56,7 @@ export class PaidIssueParser {
   }
 
   async processOrgAndRepos() {
+    // promises are too quick and they hit secondary rate limit
     for (const org of orgs) {
       const repos = await this.getPublicRepos(org);
 
@@ -162,8 +160,8 @@ export class PaidIssueParser {
   }
 
   async _fetchAndProcessRepoComments(org: string, repoName: string, response: GraphQlGitHubResponse) {
-    for await (const issue of response.repository.issues.edges) {
-      this.log(`${repoName}/#${issue.node.number} `);
+    if (!this.repoPaymentInfo[repoName]) this.repoPaymentInfo[repoName] = {};
+    for (const issue of response.repository.issues.edges) {
       const issueNumber = issue.node.number;
       const issueCreator = issue.node.author?.login;
       const issueAssignee = issue.node.assignees.edges.length > 0 ? issue.node.assignees.edges[0].node?.login : "No assignee";
@@ -188,62 +186,51 @@ export class PaidIssueParser {
 
         comments = comments.concat(botComments);
 
-        for await (const comment of botComments) {
-          const timestamp = comment.node.createdAt;
-          const body = comment.node.body;
-          if (!this.repoPaymentInfo[repoName]) this.repoPaymentInfo[repoName] = {};
-
-          await this.parseComment(body, repoName, issueNumber, issueCreator, comment, issueAssignee, timestamp);
-        }
-
         hasNextPageComments = commentsResponse.repository.issue.comments.pageInfo.hasNextPage;
         commentsCursor = commentsResponse.repository.issue.comments.pageInfo.endCursor;
+      }
+
+      if (!comments.length) continue;
+
+      for (const comment of comments) {
+        const timestamp = comment.node.createdAt;
+        const body = comment.node.body;
+        await this.parseComment(body, repoName, issueNumber, issueCreator, issueAssignee, timestamp);
       }
     }
   }
 
-  async parseComment(
-    body: string,
-    repoName: string,
-    issueNumber: number,
-    issueCreator: string,
-    comment: { node: { author: { login: string }; createdAt: string } },
-    issueAssignee: string,
-    timestamp: string
-  ) {
-    // we only want comments from ubiquibot, pavlovcik, and 0x4007
-    if (comment.node.author?.login === "ubiquibot" || comment.node.author?.login === "pavlovcik" || comment.node.author?.login === "0x4007") {
-      // if any of the four regexes match
-      const paymentInfo = await this.parsePaymentInfo(body);
+  async parseComment(body: string, repoName: string, issueNumber: number, issueCreator: string, issueAssignee: string, timestamp: string) {
+    const matched = this.commentContainsPermit(body);
+    const paymentInfo = await this.parsePaymentInfo(matched);
+    if (!paymentInfo) return;
 
-      if (!paymentInfo) return;
-      if (!this.repoPaymentInfo[repoName][issueNumber]) {
-        this.repoPaymentInfo[repoName][issueNumber] = [];
+    if (!this.repoPaymentInfo[repoName][issueNumber]) {
+      this.repoPaymentInfo[repoName][issueNumber] = [];
+    }
+
+    for (const _permit of paymentInfo) {
+      if (!_permit) continue;
+      let { permit } = _permit;
+
+      if (Array.isArray(permit)) {
+        permit = permit[0];
       }
 
-      for (const _permit of paymentInfo) {
-        if (!_permit) continue;
-        let { permit } = _permit;
+      const toPush = {
+        beneficiary: _permit.claimantUsername,
+        issueCreator,
+        issueAssignee,
+        issueNumber,
+        repoName,
+        timestamp: timestamp,
+        claimUrl: _permit.claimUrl,
+        reward: permit,
+      };
 
-        if (Array.isArray(permit)) {
-          permit = permit[0];
-        }
-
-        const toPush = {
-          beneficiary: _permit.claimantUsername,
-          issueCreator,
-          issueAssignee,
-          issueNumber,
-          repoName,
-          timestamp: timestamp,
-          claimUrl: _permit.claimUrl,
-          permit,
-        };
-
-        this.repoPaymentInfo[repoName][issueNumber].push(toPush);
-        this.sigPaymentInfo[permit.signature.toLowerCase()] = toPush;
-        this.addWalletPaymentInfo(toPush);
-      }
+      this.repoPaymentInfo[repoName][issueNumber].push(toPush);
+      this.sigPaymentInfo[permit.signature.toLowerCase()] = toPush;
+      this.addWalletPaymentInfo(toPush);
     }
   }
 
@@ -254,9 +241,9 @@ export class PaidIssueParser {
     repoName: string;
     timestamp: string;
     claimUrl: string;
-    permit: PermitDetails;
+    reward: PermitDetails;
   }) {
-    const { transferDetails } = permit.permit;
+    const { transferDetails } = permit.reward;
 
     if (!transferDetails) {
       return;
@@ -271,34 +258,27 @@ export class PaidIssueParser {
     this.walletPaymentInfo[to].push(permit);
   }
 
-  async parsePaymentInfo(comment: string) {
-    const urlMatch = comment.match(/https:\/\/pay\.ubq\.fi\/?\?claim=[^\s]*/g);
-    const match = comment.match(base64Regex);
-
-    if (!match) {
+  async parsePaymentInfo(matched: string[] | null) {
+    if (!matched) {
       return null;
-    } else if (match.length === 1 && urlMatch?.length) {
-      return [await this.parsePermitData(match[0], urlMatch[0])];
+    } else if (matched.length === 1) {
+      return [await this.parsePermitData(matched[0])];
     }
-
-    const claimUrls = match;
     const permits = [];
-
-    for (const permitStr of claimUrls) {
-      permits.push(await this.parsePermitData(permitStr, urlMatch?.[0] as string));
+    for (const permitStr of matched) {
+      permits.push(await this.parsePermitData(permitStr));
     }
 
     return permits;
   }
 
-  async parsePermitData(permitStr: string, claimUrl: string) {
-    let permitString = this.sanitizeClaimUrl(permitStr);
+  async parsePermitData(claimUrl: string) {
+    let permitString = this.sanitizeClaimUrl(claimUrl);
     if (!permitString) return;
 
     try {
       permitString = atob(permitString);
-    } catch (error) {
-      this.log("Failed to decode permit: \n\n\n " + permitString, "error", error);
+    } catch {
       return;
     }
 
@@ -325,6 +305,8 @@ export class PaidIssueParser {
       }
     }
 
+    claimUrl = `https://pay.ubq.fi/?claim=${claimUrl}`;
+
     return {
       claimUrl,
       claimantUsername,
@@ -333,28 +315,15 @@ export class PaidIssueParser {
   }
 
   commentContainsPermit(comment: string) {
-    const match = comment.match(/\*\*CLAIM (\d+(\.\d+)?) (XDAI|DAI|WXDAI)\*\*/g);
-    const rematch = comment.match(/CLAIM (\d+(\.\d+)?) (XDAI|DAI|WXDAI)/g);
-    const altMatch = comment.match(/\[\s*\[\s*(\d+(\.\d+)?)\s*(XDAI|DAI|WXDAI)\s*\]\]/g);
-    const permitMatch = comment.match(/https:\/\/pay\.ubq\.fi\/?\?claim=[^\s]*/g);
-
-    return !!(match || rematch || altMatch || permitMatch || base64Regex);
+    return comment.match(/https:\/\/pay\.ubq\.fi\/?\?claim=[^\s]*/g);
   }
 
   sanitizeClaimUrl(str: string) {
-    if (!base64Regex.test(str)) return;
-
-    str.replaceAll("%3D", "");
-    str.replaceAll("%3D=", "");
-    str.replaceAll('\\">', "");
-    str.replaceAll('">', "");
-    str.replaceAll(`)`, "");
-    str.replaceAll(">", "");
-    str.replaceAll("\\", "");
-    str.replaceAll('"', "");
-    str.replaceAll(`&network=100"`, "");
-
-    return str;
+    // capture only the base64 string after `claim='
+    const base64Regex = /=[A-Za-z0-9+/=]+/g;
+    const base64str = str.match(base64Regex);
+    if (!base64str) return null;
+    return base64str[0].slice(1);
   }
 
   async fetchGithubUser(userId: number) {
@@ -509,14 +478,4 @@ type GraphQlGitHubResponse = {
     issue: { comments: { edges: { node: Comment }[]; pageInfo: { hasNextPage: boolean; endCursor: string } } };
     issues: { edges: IssueComment[]; pageInfo: { hasNextPage: boolean; endCursor: string } };
   };
-};
-
-export type IssueOut = {
-  issueCreator: string;
-  issueAssignee: string;
-  issueNumber: number;
-  repoName: string;
-  timestamp: string;
-  claimUrl: string;
-  permit: PermitDetails;
 };

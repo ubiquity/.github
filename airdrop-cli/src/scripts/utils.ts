@@ -1,7 +1,8 @@
 import { PERMIT2_ADDRESS } from "../utils/constants";
 import { BigNumber, BigNumberish, ethers } from "ethers";
 import { permit2Abi } from "../abis/permit2Abi";
-import { SupabaseClient } from "@supabase/supabase-js";
+import { createClient } from "@supabase/supabase-js";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "../utils/constants";
 
 function nonceBitmap(nonce: BigNumberish): { wordPos: BigNumberish; bitPos: number } {
   // wordPos is the first 248 bits of the nonce
@@ -23,7 +24,9 @@ async function invalidateNonce(nonce: string, owner: string, provider: ethers.pr
   return bit.and(flipped).eq(0);
 }
 
-export async function getSupabaseData(sb: SupabaseClient): Promise<{ walletToIdMap: Map<string, number>; idToWalletMap: Map<number, string>; users: User[] }> {
+const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+export async function getSupabaseData(): Promise<{ walletToIdMap: Map<string, number>; idToWalletMap: Map<number, string>; users: User[] }> {
   const walletToIdMap = new Map<string, number>();
   const idToWalletMap = new Map<number, string>();
 

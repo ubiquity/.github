@@ -1,9 +1,9 @@
 import { BigNumber, ethers } from "ethers";
-import { SupabaseClient, createClient } from "@supabase/supabase-js";
 import { permit2Abi } from "../abis/permit2Abi";
 import { Decoded, ScanResponse, User } from "../types";
-import { SUPABASE_ANON_KEY, SUPABASE_URL, UBQ_OWNERS } from "../utils/constants";
-import { getSupabaseData } from "./utils";
+import { UBQ_OWNERS } from "../utils/constants";
+import { getSupabaseData, loader } from "./utils";
+import { writeFile } from "fs/promises";
 /**
  * Collects permits using Etherscan and Gnosisscan APIs.
  * Does so using the tx history from three sources:
@@ -17,7 +17,6 @@ export class UserBlockTxParser {
   gnosisApiKey: string;
   etherscanApiKey: string;
   permitDecoder: ethers.utils.Interface;
-  sb: SupabaseClient;
   ethProvider: ethers.providers.WebSocketProvider;
   gnosisProvider: ethers.providers.WebSocketProvider;
   userWallets: (string | undefined)[] = [];
@@ -28,7 +27,6 @@ export class UserBlockTxParser {
     this.gnosisApiKey = gnosisApiKey;
     this.etherscanApiKey = etherscanApiKey;
     this.permitDecoder = new ethers.utils.Interface(permit2Abi);
-    this.sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
     this.gnosisProvider = new ethers.providers.WebSocketProvider("wss://gnosis-rpc.publicnode.com", {
       name: "Gnosis Chain",
       chainId: 100,
@@ -43,27 +41,29 @@ export class UserBlockTxParser {
   }
 
   async run() {
-    const loader = this.loader();
-    const { idToWalletMap, users } = await getSupabaseData(this.sb);
+    const loader_ = loader();
+    const { idToWalletMap, users } = await getSupabaseData();
     this.users = users;
 
     const userWalletIds = this.users.map((user) => user.wallet_id);
     this.userWallets = userWalletIds.map((id) => idToWalletMap.get(id)?.toLowerCase());
 
     await this.batcher();
-    clearInterval(loader);
+    await writeFile("src/scripts/data/user-tx-sigs.json", JSON.stringify(this.userSigPermits, null, 2));
+    console.log(`[UserBlockTxParser] Found ${Object.keys(this.userSigPermits).length} permits.`);
+    clearInterval(loader_);
   }
 
   async batcher() {
     const batches = {
       permit2: "0x000000000022D473030F116dDEE9F6B43aC78BA3".toLowerCase(),
-      // previous and current UBQ wallet addresses
       owners: UBQ_OWNERS,
       users: this.userWallets,
     };
 
     for (const [target, batch] of Object.entries(batches)) {
       const shouldUseFrom = target === "permit2";
+      console.log(`Processing ${target}...`);
 
       await this.processBatch(batch, shouldUseFrom);
     }
@@ -96,7 +96,7 @@ export class UserBlockTxParser {
       const indexerAddress = log[indexer].toLowerCase();
       if (!this.userWallets.includes(indexerAddress)) continue;
       const decoded = this.decodePermit(log);
-      const sig = decoded.signature.toLowerCase();
+      const sig = decoded.reward.signature.toLowerCase();
 
       this.userSigPermits[sig] = decoded;
     }
@@ -113,12 +113,19 @@ export class UserBlockTxParser {
     const chain = chainId === 1 ? "eth" : "gnosis";
     const toBlock = to ?? (await this.getBlockNumbers())[chain];
     const fromBlock = chain === "eth" ? 10373290 : 15349006; // ~3yrs ago 29/05/2024
-    const url = `https://api.${chain}.io/api?module=account&action=txlist&address=${address}&startblock=${fromBlock}&endblock=${toBlock}&page=1&offset=1000&sort=asc&apikey=${this.etherscanApiKey}`;
-    const response = await (await fetch(url)).json();
+    let response = { result: [] || "Max rate limit reached" };
+
+    try {
+      const scanEntity = chain === "eth" ? "etherscan" : "gnosisscan";
+      const url = `https://api.${scanEntity}.io/api?module=account&action=txlist&address=${address}&startblock=${fromBlock}&endblock=${toBlock}&page=1&offset=1000&sort=asc&apikey=${this.etherscanApiKey}`;
+      response = await (await fetch(url)).json();
+    } catch (err) {
+      console.error(err);
+    }
+
     const methodId = "0x30f28b7a";
 
-    if (response.result === "Max rate limit reached") {
-      console.log("Rate limit reached, waiting 3s before retrying...");
+    if (typeof response.result === "string" && response.result === "Max rate limit reached") {
       await new Promise((resolve) => setTimeout(resolve, 3000));
       return this.getChainTx(address, from, to, filter, chainId);
     }
@@ -136,30 +143,30 @@ export class UserBlockTxParser {
     const owner = decodedData[2];
     const signature = decodedData[3];
     const nonce = decodedData[0][1];
+    const deadline = decodedData[0][2];
 
     const strung = BigNumber.from(nonce).toString();
 
     return {
-      nonce: strung,
-      signature,
-      permitOwner: owner,
-      to,
-      permitted: {
-        amount,
-        token,
-      },
+      blockTimestamp: data.timeStamp,
       txHash: data.hash,
-      blockTimestamp: new Date(parseInt(data.timeStamp) * 1000),
+      reward: {
+        owner,
+        permit: {
+          deadline,
+          nonce: strung,
+          permitted: {
+            amount,
+            token,
+          },
+        },
+        signature,
+        transferDetails: {
+          requestedAmount: amount,
+          to,
+        },
+      },
     };
-  }
-
-  loader() {
-    const steps = ["|", "/", "-", "\\"];
-    let i = 0;
-    return setInterval(() => {
-      process.stdout.write(`\r${steps[i++]}`);
-      i = i % steps.length;
-    }, 100);
   }
 }
 

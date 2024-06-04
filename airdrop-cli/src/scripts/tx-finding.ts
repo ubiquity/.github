@@ -9,16 +9,16 @@ export async function txFinder(userSingles: FinalData[], user: string, userTxPar
   const scans: ScanResponse[][] = [];
 
   if (networkID === "100") {
-    scans.push(await userTxParser.getGnosisTxs(user, undefined, undefined, false));
+    scans.push(await userTxParser.getChainTx(user, undefined, undefined, false, 100));
   } else if (networkID === "1") {
-    scans.push(await userTxParser.getEthTxs(user, undefined, undefined, false));
+    scans.push(await userTxParser.getChainTx(user, undefined, undefined, false, 1));
   }
 
   const filteredScans = scans.flat().filter((scan) => scan.methodId === "0x30f28b7a");
-  if (filteredScans.length === 0) return null;
+  if (filteredScans.length === 0) return;
 
   const decodedPermits = filteredScans.map((scan) => userTxParser.decodePermit(scan));
-  if (decodedPermits.length === 0) return null;
+  if (decodedPermits.length === 0) return;
 
   return await findTx(userSingles, decodedPermits);
 }
@@ -28,22 +28,12 @@ async function findTx(userSingles: FinalData[], decodedPermits: Decoded[]) {
 
   for (const single of userSingles) {
     if (single.commentTimestamp && !single.blockTimestamp) {
-      // we know when the permit was generated
       const found = await findNearestTx(decodedPermits, single);
-
-      if (!found) {
-        single.blockTimestamp = null;
-        single.claimed = false;
-        continue;
-      }
+      if (!found) continue;
 
       single.blockTimestamp = found.blockTimestamp;
-      single.claimed = true;
-      single.txHash = found.txHash;
-
+      single.txHash = found.txHash ?? "";
       foundTxs.push([single, found]);
-    } else if (!(single.issueNumber && single.repoName && single.commentTimestamp) && single.blockTimestamp && !single.commentTimestamp) {
-      // we know when the permit was used
     }
   }
 

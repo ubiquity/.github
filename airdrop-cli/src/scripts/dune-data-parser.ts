@@ -1,10 +1,9 @@
 import { BigNumber, ethers } from "ethers";
 import { permit2Abi } from "../abis/permit2Abi";
-import { createClient } from "@supabase/supabase-js";
 import { TX_HASHES } from "./tx-hashes";
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from "../utils/constants";
 import { Decoded, User } from "../types";
 import { getSupabaseData, loader } from "./utils";
+import { writeFile } from "fs/promises";
 
 /**
  * Collects permits using tx hashes collected from Dune Analytics.
@@ -17,7 +16,6 @@ export class DuneDataParser {
   permitDecoder: ethers.utils.Interface;
   gnosisProvider: ethers.providers.WebSocketProvider;
   ethProvider: ethers.providers.WebSocketProvider;
-  sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
   sigMap: Record<string, Decoded> = {};
 
   constructor() {
@@ -37,10 +35,12 @@ export class DuneDataParser {
 
   async run() {
     const loader_ = loader();
-    const { idToWalletMap, users } = await getSupabaseData(this.sb);
+    const { idToWalletMap, users } = await getSupabaseData();
     await this.gatherPermits(users, idToWalletMap);
 
     clearInterval(loader_);
+
+    await writeFile("src/scripts/data/dune-sigs.json", JSON.stringify(this.sigMap, null, 2));
 
     console.log(`[DuneDataParser] Finished processing ${users.length} users`);
   }
@@ -54,9 +54,9 @@ export class DuneDataParser {
       if (!txs || !txs.length) continue;
 
       txs.map((tx) => {
-        if (!tx || !tx.permitted) return;
+        if (!tx || !tx.reward) return;
 
-        const sig = tx.signature.toLowerCase();
+        const sig = tx.reward.signature.toLowerCase();
 
         if (!this.sigMap[sig]) {
           this.sigMap[sig] = tx;
@@ -95,7 +95,7 @@ export class DuneDataParser {
     const decodedData: ethers.utils.Result = this.permitDecoder.decodeFunctionData("permitTransferFrom", tx.data);
 
     const { blockHash, chainId } = tx;
-    let timestamp;
+    let timestamp: number = 0;
 
     if (blockHash && chainId === 1) {
       timestamp = (await this.ethProvider.getBlock(blockHash))?.timestamp;
@@ -109,18 +109,29 @@ export class DuneDataParser {
     const owner = decodedData[2];
     const signature = decodedData[3];
     const nonce = decodedData[0][1];
+    const deadline = decodedData[0][2];
+
+    const strung = BigNumber.from(nonce).toString();
 
     return {
-      nonce: BigNumber.from(nonce).toString().toLowerCase(),
-      signature,
-      permitOwner: owner,
-      to,
-      permitted: {
-        amount,
-        token,
-      },
+      blockTimestamp: new Date(timestamp * 1000),
       txHash: tx.hash,
-      blockTimestamp: new Date((timestamp ?? 0) * 1000),
+      reward: {
+        owner,
+        permit: {
+          deadline,
+          nonce: strung,
+          permitted: {
+            amount,
+            token,
+          },
+        },
+        signature,
+        transferDetails: {
+          requestedAmount: amount,
+          to,
+        },
+      },
     };
   }
 }
