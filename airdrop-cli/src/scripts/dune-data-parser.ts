@@ -11,7 +11,6 @@ import { writeFile } from "fs/promises";
  *
  * Least fruitful of the three methods.
  */
-
 export class DuneDataParser {
   permitDecoder: ethers.utils.Interface;
   gnosisProvider: ethers.providers.WebSocketProvider;
@@ -69,7 +68,6 @@ export class DuneDataParser {
     if (!wallet) return null;
     console.info(`Processing wallet: ${wallet}`);
 
-    // using the txhashes collected using Dune Analytics
     const userTxHashes = TX_HASHES[wallet.toLowerCase()];
     let count = userTxHashes?.length;
 

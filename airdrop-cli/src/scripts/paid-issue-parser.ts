@@ -14,10 +14,12 @@ const GITHUB_GRAPHQL_API = "https://api.github.com/graphql";
 const orgs = ["Ubiquity", "ubiquibot"];
 
 /**
- * Refactoring of tally.ts into a more maintainable class.
+ * Refactoring of tally.ts into a far more maintainable class.
  *
- * Collects permits by parsing comments on issues in public repos.
+ * Collects permits by parsing comments on issues in repos.
  * Specifically, it looks for comments from ubiquibot, pavlovcik, and 0x4007.
+ *
+ * If ran by someone with private repo access, I'm sure it will tally those up too.
  *
  * Reliance is solely on the claim url to extract the permit data.
  * Most fruitful of the three methods.
@@ -27,32 +29,22 @@ export class PaidIssueParser {
   idToWalletMap = new Map<number, string>();
   users: User[] | null = [];
   octokit = new Octokit({ auth: GITHUB_TOKEN });
-
-  // repo -> issueNumber -> IssueOut[]
-  repoPaymentInfo: Record<string, Record<number, IssueOut[]>> = {};
-  // Signature -> IssueOut
   sigPaymentInfo: Record<string, IssueOut> = {};
-  // wallet -> IssueOut[]
-  walletPaymentInfo: Record<string, IssueOut[]> = {};
 
   async run() {
     const loader_ = loader();
-    const { idToWalletMap: idWalletMap, users: _users, walletToIdMap: walletMap } = await getSupabaseData();
+    const supabaseData = await getSupabaseData();
 
-    this.idToWalletMap = idWalletMap;
-    this.users = _users;
-    this.walletToIdMap = walletMap;
+    this.idToWalletMap = supabaseData.idToWalletMap;
+    this.users = supabaseData.users;
+    this.walletToIdMap = supabaseData.walletToIdMap;
 
     await this.processOrgAndRepos();
 
     clearInterval(loader_);
-    this.log(`[PaidIssueParser] Finished processing ${Object.keys(this.repoPaymentInfo).length} repos`);
+    console.log(`[PaidIssueParser] Finished processing ${Object.keys(this.sigPaymentInfo).length} permits.`);
     await writeFile("src/scripts/data/issue-sigs.json", JSON.stringify(this.sigPaymentInfo, null, 2));
-    return {
-      repoPaymentInfo: this.repoPaymentInfo,
-      sigPaymentInfo: this.sigPaymentInfo,
-      walletPaymentInfo: this.walletPaymentInfo,
-    };
+    return this.sigPaymentInfo;
   }
 
   async processOrgAndRepos() {
@@ -62,7 +54,7 @@ export class PaidIssueParser {
 
       for await (const repo of repos) {
         if (repo.isArchived) continue;
-        this.log(`Processing ${org}/${repo.name}`);
+        console.log(`Processing ${org}/${repo.name}`);
 
         const shouldRetry = await this._processOrgAndRepos(org, repo);
 
@@ -78,7 +70,7 @@ export class PaidIssueParser {
       await this.fetchAndProcessRepoComments(org, repo.name);
     } catch (e) {
       if (e instanceof Error && e.message.includes("rate limit")) {
-        this.log("Rate limit exceeded, pausing...");
+        console.log("Rate limit exceeded, pausing...");
 
         const rateLimit = await this.octokit.rateLimit.get();
         const resetTime = rateLimit.data.resources.core.reset * 1000;
@@ -150,17 +142,12 @@ export class PaidIssueParser {
         issueCursor = response.repository.issues.pageInfo.endCursor;
       }
     } catch (err) {
-      this.log(err);
+      console.log(err);
     }
-    return {
-      repoPaymentInfo: this.repoPaymentInfo,
-      sigPaymentInfo: this.sigPaymentInfo,
-      walletPaymentInfo: this.walletPaymentInfo,
-    };
+    return this.sigPaymentInfo;
   }
 
   async _fetchAndProcessRepoComments(org: string, repoName: string, response: GraphQlGitHubResponse) {
-    if (!this.repoPaymentInfo[repoName]) this.repoPaymentInfo[repoName] = {};
     for (const issue of response.repository.issues.edges) {
       const issueNumber = issue.node.number;
       const issueCreator = issue.node.author?.login;
@@ -205,10 +192,6 @@ export class PaidIssueParser {
     const paymentInfo = await this.parsePaymentInfo(matched);
     if (!paymentInfo) return;
 
-    if (!this.repoPaymentInfo[repoName][issueNumber]) {
-      this.repoPaymentInfo[repoName][issueNumber] = [];
-    }
-
     for (const _permit of paymentInfo) {
       if (!_permit) continue;
       let { permit } = _permit;
@@ -228,34 +211,8 @@ export class PaidIssueParser {
         reward: permit,
       };
 
-      this.repoPaymentInfo[repoName][issueNumber].push(toPush);
       this.sigPaymentInfo[permit.signature.toLowerCase()] = toPush;
-      this.addWalletPaymentInfo(toPush);
     }
-  }
-
-  addWalletPaymentInfo(permit: {
-    issueCreator: string;
-    issueAssignee: string;
-    issueNumber: number;
-    repoName: string;
-    timestamp: string;
-    claimUrl: string;
-    reward: PermitDetails;
-  }) {
-    const { transferDetails } = permit.reward;
-
-    if (!transferDetails) {
-      return;
-    }
-
-    const to = transferDetails.to.toLowerCase();
-
-    if (!this.walletPaymentInfo[to]) {
-      this.walletPaymentInfo[to] = [];
-    }
-
-    this.walletPaymentInfo[to].push(permit);
   }
 
   async parsePaymentInfo(matched: string[] | null) {
@@ -301,7 +258,7 @@ export class PaidIssueParser {
       try {
         claimantUsername = (await this.fetchGithubUser(userID))?.username;
       } catch (error) {
-        this.log("Error fetching user", "error", error);
+        console.log("Error fetching user", "error", error);
       }
     }
 
@@ -338,7 +295,7 @@ export class PaidIssueParser {
     const { data, status } = await this.octokit.request(`GET /user/${userId}`);
 
     if (status !== 200) {
-      this.log(`Failed to fetch user data for ${userId}`);
+      console.log(`Failed to fetch user data for ${userId}`);
       return;
     }
 
@@ -347,15 +304,6 @@ export class PaidIssueParser {
       username: data.login,
       name: data.name,
     };
-  }
-
-  log(message?: string | unknown, level: "info" | "error" = "info", obj?: object | null | unknown) {
-    if (level === "info") {
-      console.log(!obj ? message : `${message} :: \n\n + ${JSON.stringify(obj, null, 2)}`);
-    }
-    if (level === "error") {
-      console.error(!obj ? message : `${message}   :: \n\n + ${JSON.stringify(obj, null, 2)}`);
-    }
   }
 }
 

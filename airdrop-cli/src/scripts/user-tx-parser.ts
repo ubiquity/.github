@@ -118,7 +118,9 @@ export class UserBlockTxParser {
 
     try {
       const scanEntity = chain === "eth" ? "etherscan" : "gnosisscan";
-      const url = `https://api.${scanEntity}.io/api?module=account&action=txlist&address=${address}&startblock=${fromBlock}&endblock=${toBlock}&page=1&offset=1000&sort=asc&apikey=${this.etherscanApiKey}`;
+      const url = `https://api.${scanEntity}.io/api?module=account&action=txlist&address=${address}&startblock=${fromBlock}&endblock=${toBlock}&page=1&offset=1000&sort=asc&apikey=${
+        chain === "eth" ? this.etherscanApiKey : this.gnosisApiKey
+      }`;
       response = await (await fetch(url)).json();
     } catch (err) {
       console.error(err);

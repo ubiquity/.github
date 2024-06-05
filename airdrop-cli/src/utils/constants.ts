@@ -6,8 +6,8 @@ export const TOKENS = {
 export const PERMIT2_ADDRESS = "0x000000000022D473030F116dDEE9F6B43aC78BA3";
 
 export const SUPABASE_URL = "https://wfzpewmlyiozupulbuur.supabase.co";
-// cspell: disable-next-line
 export const SUPABASE_ANON_KEY =
+  // cspell: disable-next-line
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndmenBld21seWlvenVwdWxidXVyIiwicm9sZSI6ImFub24iLCJpYXQiOjE2OTU2NzQzMzksImV4cCI6MjAxMTI1MDMzOX0.SKIL3Q0NOBaMehH0ekFspwgcu3afp3Dl9EDzPqs1nKs";
 
 export const UBQ_OWNERS = [

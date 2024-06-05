@@ -15,6 +15,30 @@ function format(strings: string[]) {
   return hashes;
 }
 
+/**
+  This is not a scalable approach by any means, but it's a quick and dirty way to get the job done.
+  The query I used to get the data is:
+
+  SELECT
+    t.hash,
+    t."to",
+    t."from",
+    t.block_time
+  FROM gnosis.transactions AS t
+  LEFT JOIN (
+    SELECT
+      tx_hash
+    FROM gnosis.logs
+  ) AS l
+    ON t.hash = l.tx_hash
+  WHERE
+    t."to" = 0x000000000022d473030f116ddee9f6b43ac78ba3
+    AND t."from" IN (...SUPABASE_WALLETS)
+
+  The result was then manually copied and pasted as CSV export is premium-only
+  and setting up a proper API would take too long.
+ */
+
 const details = [
   "0xe95b4ff70a5cf8c5e2e7717997e36154e60582e12f69ff11877f7491f44b97fa",
   "0x000000000022d473030f116ddee9f6b43ac78ba3",

@@ -2,129 +2,45 @@
 
 ## Overview
 
-This CLI tool tallies UBQ airdrop amounts for contributors. It does this by parsing issue comments for payout links from the UBQ bot using the GitHub GraphQL API.
+This tool is designed to tally up Ubiquity contributor permits from across all issues and create a verifiable leaderboard based on earnings from completed tasks, ensuring a high level of data integrity and transparency.
 
-## Setup
+A huge improvement from the first iteration of the airdrop tally tool, this is expected to store the underlying data into the `Permits` table in the database, which would render the need for future use of this tool obsolete.
 
-1. **GitHub Token**
-   - Add the token to `.env` as `GITHUB_TOKEN`.
-2. **Install Dependencies**
+## Usage
 
-   - Install the required dependencies using `npm` or `yarn`.
+1. Install dependencies
 
-   ```bash
-   # npm install
-   ```
+```bash
+yarn install
+```
 
-3. **Build the CLI**
+2. Open three terminals and run one parser in each terminal
 
-   - Build the CLI using the available commands.
+```bash
+yarn dune
+```
 
-   ```bash
-   # npm run cli:build
-   ```
+```bash
+yarn issue
+```
 
-4. **Run the CLI**
+```bash
+yarn userTx
+```
 
-   - Run the CLI using the available commands.
+##### Note: This will take around 10-15 minutes to complete the process.
 
-   ```bash
-   # npm run cli:start
-   ```
+3. Close all but one terminal and run the following command
 
-## Commands
+```bash
+yarn all
+```
 
-1. **start**
+## Changes Made
 
-   - Display information about the available commands and their usage.
-
-   ```bash
-   # yarn cli:start
-   ```
-
-2. **single**
-
-   - Tally UBQ airdrop for a specific repository or shortcode from the beginning of 2023.
-
-   ```bash
-   # yarn cli:single [shortcode/repo-name]
-   ```
-
-3. **tally**
-
-   - Tally UBQ airdrop for all indexable repositories since the start of 2023.
-
-   ```bash
-   # yarn cli:tally
-   ```
-
-4. **tally-from**
-
-   - Tally UBQ airdrop for all indexable repositories since a specified date (YYYY-MM-DD).
-
-   ```bash
-   # yarn cli:tally-from [date]
-   ```
-
-5. **tally-multi-csv**
-
-   - Tally UBQ airdrop for all indexable repositories since the start of 2023 and output repository-specific CSV files.
-
-   ```bash
-   # yarn cli:tally-multi-csv
-   ```
-
-6. **help**
-
-   - Display a list of indexable repositories and their shortcodes.
-
-   ```bash
-   # yarn run cli:help
-   ```
-
-## Output
-
-The CLI outputs three CSV files:
-
-1. [**All Payments**](all_repos_all_payments.csv)
-
-   - Includes payments with or without an assignee. Manual checking required for entries without an assignee which is often due to issues having been reopened or manual payouts because of issues with the bot.
-
-2. [**Contributors**](all_repos_contributors.csv)
-
-   - Provides a username-to-UBQ mapping for total UBQ earned from all payments across all repositories since the chosen time.
-
-3. [**No Payments**](all_repos_no_payments.csv)
-   - Lists repositories that have been indexed as having no payments released, including archived and inactive repositories. Manual checking may be required.
-
-## Usage Examples
-
-1. Tally UBQ airdrop for a specific repository or shortcode:
-
-   ```bash
-   # npm run cli:single dollar || npm single ubiquity-dollar
-   ```
-
-2. Tally UBQ airdrop for all indexable repositories since the start of 2023:
-
-   ```bash
-   # npm run cli:tally
-   ```
-
-3. Tally UBQ airdrop for all indexable repositories since a specified date:
-
-   ```bash
-   # npm run cli:tally-from 2023-01-01
-   ```
-
-4. Tally UBQ airdrop for all indexable repositories since the start of 2023 and output repository-specific CSV files:
-
-   ```bash
-   # npm run cli:tally-multi-csv
-   ```
-
-5. Display a list of indexable repositories and their shortcodes:
-
-   ```bash
-   # npm run cli:help
-   ```
+- Optimized and refactored the core `tally` function into a far more readable codebase.
+- Created a parser for both blockscan APIs and Dune Analytics.
+- Improved data integrity and cohesion of data from all sources as opposed to the previous version, through multiple parsers, checks and rechecks as well as outputting debug data/verification data that is much more workable.
+- Combined all data available for a given permit into a single source of truth, handy for attributing permits to the respective issues (should the DB be extended to support that)
+- Geared the tool towards seeding the database as opposed to outputting CSV files.
+- Removed the unnecessary CLIME and CLI code, as it was never used in the first place.
