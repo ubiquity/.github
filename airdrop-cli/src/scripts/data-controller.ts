@@ -1,11 +1,13 @@
 import { UserBlockTxParser } from "./user-tx-parser";
 import { Decoded, FinalData, IssueOut, PermitEntry, ScanResponse, User } from "../types";
 import { writeFile } from "fs/promises";
-import { SUPABASE_ANON_KEY, SUPABASE_URL, TOKENS, UBQ_OWNERS } from "../utils/constants";
+import { SUPABASE_ANON_KEY, SUPABASE_URL, TOKENS, UBQ_OWNERS, PERMIT2_ADDRESS } from "../utils/constants";
 import { ethers } from "ethers";
 import { formatUnits } from "viem";
 import { getSupabaseData } from "./utils";
 import { createClient } from "@supabase/supabase-js";
+import { permit2Abi } from "../abis/permit2Abi";
+import { BigNumber, BigNumberish } from "ethers";
 
 const tokens = {
   [TOKENS.WXDAI]: 1, // permits in DB exist with WXDAI as token_id == 1
@@ -69,8 +71,51 @@ export class DataController {
     await this.gatherData();
     await this.matchAll();
     await this.findAndRemoveInvalidatedNonces();
-
     await this.leaderboard();
+    await this.findUnspentPermits();
+  }
+
+  async findUnspentPermits() {
+    const unspent: Record<string, FinalData[]> = {};
+
+    for (const user of Object.keys(this.finalData)) {
+      const userFinalData = this.finalData[user];
+
+      const unspentPermits = userFinalData.filter((permit) => !permit.txHash);
+      const unclaimedPermits = unspentPermits.filter(async (permit) => {
+        return await this.invalidateNonce(permit.reward.permit.nonce, permit.reward.owner, this.userTxParser.gnosisProvider);
+      });
+
+      unspent[user] = unclaimedPermits;
+    }
+
+    await writeFile("src/scripts/data/dc-unspent-permits.json", JSON.stringify(unspent, null, 2));
+  }
+
+  nonceBitmap(nonce: BigNumberish): { wordPos: BigNumberish; bitPos: number } {
+    // wordPos is the first 248 bits of the nonce
+    const wordPos = BigNumber.from(nonce).shr(8);
+    // bitPos is the last 8 bits of the nonce
+    const bitPos = BigNumber.from(nonce).and(255).toNumber();
+    return { wordPos, bitPos };
+  }
+
+  async invalidateNonce(nonce: string, owner: string, provider: ethers.providers.WebSocketProvider): Promise<boolean> {
+    if (!nonce) throw new Error("No nonce provided");
+    if (!owner) throw new Error("No owner provided");
+    if (!provider) throw new Error("No provider provided");
+
+    const permit2Contract = new ethers.Contract(PERMIT2_ADDRESS, permit2Abi, provider);
+
+    const { wordPos, bitPos } = this.nonceBitmap(BigNumber.from(nonce));
+
+    if (!wordPos || !bitPos) throw new Error("Could not calculate wordPos or bitPos");
+    const bitmap = await permit2Contract.nonceBitmap(owner, wordPos);
+
+    const bit = BigNumber.from(1).shl(bitPos);
+    const flipped = BigNumber.from(bitmap).xor(bit);
+
+    return bit.and(flipped).eq(0);
   }
 
   /**
@@ -180,7 +225,9 @@ export class DataController {
         this.nonceMap.set(nonce, [finalData]);
       }
 
-      this.finalData[finalData.reward.transferDetails.to] = [...(this.finalData[finalData.reward.transferDetails.to] ?? []), finalData];
+      const to = finalData.reward.transferDetails.to;
+
+      this.finalData[to.toLowerCase()] = [...(this.finalData[to.toLowerCase()] ?? []), finalData];
     });
   }
 

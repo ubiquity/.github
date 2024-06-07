@@ -262,7 +262,7 @@ export class PaidIssueParser {
       }
     }
 
-    claimUrl = `https://pay.ubq.fi/?claim=${claimUrl}`;
+    claimUrl = `https://pay.ubq.fi/?claim=${permitString}`;
 
     return {
       claimUrl,
