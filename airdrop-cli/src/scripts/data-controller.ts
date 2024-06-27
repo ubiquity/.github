@@ -404,7 +404,7 @@ export class DataController {
 
     if (!user) {
       this.nonUserPermits.push({
-        amount: ethers.utils.formatUnits(amount, 18),
+        amount: BigNumber.from(amount).toString(),
         nonce,
         deadline,
         signature,
@@ -417,7 +417,7 @@ export class DataController {
     }
 
     return {
-      amount: ethers.utils.formatUnits(amount, 18),
+      amount: BigNumber.from(amount).toString(),
       nonce,
       deadline,
       signature,
