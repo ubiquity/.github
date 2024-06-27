@@ -72,8 +72,7 @@ export type PermitEntry = {
   nonce: string;
   deadline: string;
   signature: string;
-  token_id: string;
-  partner_id: string;
+  token_id: number;
   beneficiary_id: number;
   transaction: string;
 };

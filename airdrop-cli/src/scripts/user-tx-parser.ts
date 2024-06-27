@@ -28,13 +28,13 @@ export class UserBlockTxParser {
     this.gnosisApiKey = gnosisApiKey;
     this.etherscanApiKey = etherscanApiKey;
     this.permitDecoder = new ethers.utils.Interface(permit2Abi);
-    this.gnosisProvider = new ethers.providers.WebSocketProvider("wss://gnosis-rpc.publicnode.com", {
+    this.gnosisProvider = new ethers.providers.WebSocketProvider("wss://rpc.gnosischain.com/wss", {
       name: "Gnosis Chain",
       chainId: 100,
       ensAddress: "",
     });
 
-    this.ethProvider = new ethers.providers.WebSocketProvider("wss://ethereum-rpc.publicnode.com", {
+    this.ethProvider = new ethers.providers.WebSocketProvider("wss://mainnet.gateway.tenderly.co", {
       name: "Ethereum Mainnet",
       chainId: 1,
       ensAddress: "",
@@ -118,9 +118,8 @@ export class UserBlockTxParser {
 
     try {
       const scanEntity = chain === "eth" ? "etherscan" : "gnosisscan";
-      const url = `https://api.${scanEntity}.io/api?module=account&action=txlist&address=${address}&startblock=${fromBlock}&endblock=${toBlock}&page=1&offset=1000&sort=asc&apikey=${
-        chain === "eth" ? this.etherscanApiKey : this.gnosisApiKey
-      }`;
+      const url = `https://api.${scanEntity}.io/api?module=account&action=txlist&address=${address}&startblock=${fromBlock}&endblock=${toBlock}&page=1&offset=1000&sort=asc&apikey=${chain === "eth" ? this.etherscanApiKey : this.gnosisApiKey
+        }`;
       response = await (await fetch(url)).json();
     } catch (err) {
       console.error(err);

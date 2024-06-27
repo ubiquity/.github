@@ -4,7 +4,7 @@ import { writeFile } from "fs/promises";
 import { SUPABASE_ANON_KEY, SUPABASE_URL, TOKENS, UBQ_OWNERS, PERMIT2_ADDRESS } from "../utils/constants";
 import { ethers } from "ethers";
 import { formatUnits } from "viem";
-import { getSupabaseData } from "./utils";
+import { getSupabaseData, loader } from "./utils";
 import { createClient } from "@supabase/supabase-js";
 import { permit2Abi } from "../abis/permit2Abi";
 import { BigNumber, BigNumberish } from "ethers";
@@ -13,40 +13,6 @@ const tokens = {
   [TOKENS.WXDAI]: 1, // permits in DB exist with WXDAI as token_id == 1
   [TOKENS.DAI]: 2, // since no other tokens as of yet, we can assume DAI is 2
 };
-
-/**
- * Because the data is spread across multiple sources, this controller
- * will gather all the data and prepare it for the database.
- *
- * Specifically, it will:
- * 1. Gather data from each parser
- * 2. Match on-chain data with off-chain data
- * 3. Prepare the data for the database
- * 4. Populate the database
-
-  Found 776 total entries
-  Entries with tx: 439
-  Entries without tx: 338
-  Found 21 invalidated nonces
-  Found 15 repos with duplicate nonces
-
- * Found 15 repos with duplicate nonces:
- * Repo: production has 14 duplicate nonces
- * Repo: ubiquibar has 2 duplicate nonces
- * Repo: ubiquibot has 14 duplicate nonces
- * Repo: research has 2 duplicate nonces
- * Repo: comment-incentives has 6 duplicate nonces
- * Repo: ts-template has 2 duplicate nonces
- * Repo: devpool-directory-bounties has 19 duplicate nonces
- * Repo: recruiting has 2 duplicate nonces
- * Repo: ubiquibot-kernel has 2 duplicate nonces
- * Repo: cloudflare-deploy-action has 8 duplicate nonces
- * Repo: business-development has 8 duplicate nonces
- * Repo: permit-generation has 2 duplicate nonces
- * Repo: ubiquity-dollar has 9 duplicate nonces
- * Repo: sponsorships has 5 duplicate nonces
- * Repo: sandbox has 2 duplicate nonces
- */
 
 export class DataController {
   sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
@@ -58,21 +24,33 @@ export class DataController {
 
   walletToIdMap = new Map<string, number>();
   users: User[] | null = [];
+  userDict: Record<string, number> = {};
+  nonPermitEntries = [] as PermitEntry[];
+  failedToPush: PermitEntry[] = [];
 
   singles: Record<string, FinalData> = {};
   doubles: Record<string, FinalData> = {};
   triples: Record<string, FinalData> = {};
+
 
   finalData: Record<string, FinalData[]> = {};
   nonceMap: Map<string, FinalData[]> = new Map();
   invalidatedNonces = [] as { hash: string; owner: string; nonce: string; wordPos: string; bitPos: string }[];
 
   async run() {
+    const loader_ = loader();
     await this.gatherData();
+    console.log("Gathered data")
     await this.matchAll();
+    console.log("Matched all")
     await this.findAndRemoveInvalidatedNonces();
+    console.log("Found and removed invalidated nonces")
     await this.leaderboard();
+    console.log("Calculated leaderboard")
     await this.findUnspentPermits();
+    console.log("Found unspent permits")
+
+    clearInterval(loader_);
   }
 
   async findUnspentPermits() {
@@ -106,7 +84,6 @@ export class DataController {
     if (!provider) throw new Error("No provider provided");
 
     const permit2Contract = new ethers.Contract(PERMIT2_ADDRESS, permit2Abi, provider);
-
     const { wordPos, bitPos } = this.nonceBitmap(BigNumber.from(nonce));
 
     if (!wordPos || !bitPos) throw new Error("Could not calculate wordPos or bitPos");
@@ -122,9 +99,14 @@ export class DataController {
    * Finds transactions matching the `invalidateUnorderedNonces` method
    * from the four known UBQ owners and removes those nonces from the
    * final data.
+   * 
+   * The new websocket providers resolve the "this should not happen" error
+   * although this function from time to time may either take a long time
+   * or hang indefinitely. Cancelling the script and restarting it seems to
+   * resolve the issue.
    */
   async findAndRemoveInvalidatedNonces() {
-    for await (const owner of UBQ_OWNERS) {
+    for (const owner of UBQ_OWNERS) {
       const scans: ScanResponse[][] = [];
 
       scans.push(
@@ -136,7 +118,7 @@ export class DataController {
       if (filteredScans.length === 0) continue;
 
       for (const scan of filteredScans) {
-        const invalidated = await this.decodeInvalidate(scan);
+        const invalidated = this.decodeInvalidate(scan);
         if (invalidated) {
           this.invalidatedNonces.push({
             nonce: invalidated.nonce.toString(),
@@ -275,7 +257,7 @@ export class DataController {
    * Breaks down the input data from the `invalidateUnorderedNonces`
    * method and removes all the nonces that were invalidated.
    */
-  async decodeInvalidate(data: ScanResponse) {
+  decodeInvalidate(data: ScanResponse) {
     const decoded = this.userTxParser.permitDecoder.decodeFunctionData("invalidateUnorderedNonces", data.input);
 
     const wordPos = ethers.BigNumber.from(decoded[0].toString());
@@ -343,11 +325,13 @@ export class DataController {
 
         const entry = this.createPermitEntry(permit);
         newFinal[user].push(permit);
-        dbEntries[repoName].push(entry);
+        if (entry) {
+          dbEntries[repoName].push(entry);
+        }
       }
     }
-    await this.populateDB(dbEntries);
 
+    await writeFile("src/scripts/data/dc-non-permit-entries.json", JSON.stringify(this.nonPermitEntries, null, 2));
     await writeFile("src/scripts/data/dc-db-entries.json", JSON.stringify(dbEntries, null, 2));
     await writeFile("src/scripts/data/dc-final-data.json", JSON.stringify(newFinal, null, 2));
     await writeFile(
@@ -370,6 +354,8 @@ export class DataController {
         2
       )
     );
+
+    await this.populateDB(dbEntries);
   }
 
   // sonar workaround, it just instantiates the objects
@@ -396,7 +382,7 @@ export class DataController {
   }
 
   // Convert our FinalData objects into a DB friendly format.
-  createPermitEntry(finalData: FinalData): PermitEntry {
+  createPermitEntry(finalData: FinalData): PermitEntry | null {
     const { reward, txHash } = finalData;
 
     const tokenId = tokens[reward.permit.permitted.token.toLowerCase() as keyof typeof tokens];
@@ -406,10 +392,25 @@ export class DataController {
     const amount = reward.permit.permitted.amount;
     const signature = reward.signature;
 
-    const beneficiaryId = this.walletToIdMap.get(to.toLowerCase()) ?? this.walletToIdMap.get(to);
-    if (!beneficiaryId) {
-      console.error(`Could not find beneficiaryId for ${to}`);
-      throw new Error(`Could not find beneficiaryId for ${to}`);
+    const walletId = this.walletToIdMap.get(to.toLowerCase()) ?? this.walletToIdMap.get(to);
+    if (!walletId) {
+      console.log("Wallet ID not found for", to);
+      return null;
+    }
+    const user = this.userDict[walletId];
+
+    if (!user) {
+      this.nonPermitEntries.push({
+        amount: amount.toString(),
+        nonce,
+        deadline,
+        signature,
+        token_id: tokenId,
+        beneficiary_id: walletId ?? 0,
+        transaction: txHash ?? undefined,
+      });
+
+      return null;
     }
 
     return {
@@ -417,16 +418,15 @@ export class DataController {
       nonce,
       deadline,
       signature,
-      token_id: tokenId.toString(),
-      partner_id: "0", // assume UBQ is 0 since none exist with an id?
-      beneficiary_id: beneficiaryId,
+      token_id: tokenId,
+      beneficiary_id: user,
       transaction: txHash ?? undefined,
     };
   }
 
   /**
    * Populates the database with the data we have gathered.
-   * Ensures only full bodied entries are added, so 439 entries in total.
+   * Ensures only full bodied entries are added
    *
    * Does not attribute permits to the issue number or repo they belong to,
    * although this data is readily available in this.finalData.
@@ -468,18 +468,16 @@ export class DataController {
     const dbStoredRemoved = invalidatedRemoved.filter(({ nonce }) => !data.find((entry) => entry.nonce === nonce));
     const thoseWithTx = dbStoredRemoved.filter((entry) => entry.transaction);
     const thoseWithoutTx = dbStoredRemoved.filter((entry) => !entry.transaction);
-
+    const highestId = data.reduce((acc, entry) => (entry.id > acc ? entry.id : acc), 0);
     await writeFile("src/scripts/data/dc-duplicate-nonces.json", JSON.stringify(duplicateNonces, null, 2));
     await writeFile("src/scripts/data/dc-without-tx.json", JSON.stringify(thoseWithoutTx, null, 2));
     await writeFile("src/scripts/data/dc-with-tx.json", JSON.stringify(thoseWithTx, null, 2));
 
-    /**
-     * See the function comment for why this is commented out.
-     *
-     * for (let i = 0; i < thoseWithTx.length; i += 300) {
-     *   await this.pushToDB(thoseWithTx.slice(i, i + 300));
-     * }
-     */
+    for (let i = 0; i < thoseWithTx.length; i++) {
+      await this.pushToDB(thoseWithTx[i], i, highestId);
+    }
+
+    await writeFile("src/scripts/data/dc-failed-to-push.json", JSON.stringify(this.failedToPush, null, 2));
   }
 
   async processDupes(
@@ -513,24 +511,16 @@ export class DataController {
     }
   }
 
-  /**
-   * Tough to test this function since it's a direct call to the database
-   * and the RLS setup means I cannot push to my DB without rebuilding the
-   * prod DB due to constraints re: locations etc. And even that is a bit of a
-   * pain since I have to reseed the DB with the correct data for all the other
-   * tables that are related to this one. Plus, location is deprecated and will be
-   * removed in the future.
-   *
-   * I don't think I'm even able to pull all the info I'd need to properly
-   * test this function (tried seeding users and wallets to no avail),
-   * and this is another reason why there are a lot of file writes in this script.
-   */
-  async pushToDB(batch: PermitEntry[]) {
-    const { error } = await this.sb.from("permits").insert(batch);
+  async pushToDB(batch: PermitEntry, i: number, base: number) {
+    const { error } = await this.sb.from("permits").insert({
+      ...batch,
+      id: base + i + 1,
+    });
     if (error) {
-      console.error("Error inserting batch", error);
-      throw error;
+      this.failedToPush.push(batch);
     }
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
   }
 
   /**
@@ -543,6 +533,10 @@ export class DataController {
     const userInfo = await getSupabaseData();
 
     this.users = userInfo.users;
+    userInfo.users.forEach((user) => {
+      this.userDict[user.wallet_id] = user.id;
+    });
+
     this.walletToIdMap = userInfo.walletToIdMap;
     this.issueSigMap = ISSUE_SIGS as unknown as Record<string, IssueOut>;
     this.duneSigMap = DUNE_SIGS as unknown as Record<string, Decoded>;
@@ -559,4 +553,4 @@ async function main() {
   await parser.run();
 }
 
-main().catch(console.error);
+main().catch(console.error).finally(() => process.exit(0));
