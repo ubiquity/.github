@@ -1,8 +1,8 @@
 import { createClient } from "@supabase/supabase-js";
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from "../utils/constants";
+import { SUPABASE_KEY, SUPABASE_URL } from "../utils/constants";
 import { User } from "../types";
 
-const sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+const sb = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 export async function getSupabaseData(): Promise<{ walletToIdMap: Map<string, number>; idToWalletMap: Map<number, string>; users: User[] }> {
   const walletToIdMap = new Map<string, number>();

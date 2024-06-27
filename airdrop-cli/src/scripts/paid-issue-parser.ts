@@ -232,7 +232,7 @@ export class PaidIssueParser {
   async parsePermitData(claimUrl: string) {
     let permitString = this.sanitizeClaimUrl(claimUrl);
     if (!permitString) return;
-
+    claimUrl = `https://pay.ubq.fi/?claim=${permitString}`;
     try {
       permitString = atob(permitString);
     } catch {
@@ -262,7 +262,6 @@ export class PaidIssueParser {
       }
     }
 
-    claimUrl = `https://pay.ubq.fi/?claim=${permitString}`;
 
     return {
       claimUrl,

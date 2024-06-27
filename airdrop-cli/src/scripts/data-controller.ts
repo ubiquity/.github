@@ -1,7 +1,7 @@
 import { UserBlockTxParser } from "./user-tx-parser";
 import { Decoded, FinalData, IssueOut, PermitEntry, ScanResponse, User } from "../types";
 import { writeFile } from "fs/promises";
-import { SUPABASE_ANON_KEY, SUPABASE_URL, TOKENS, UBQ_OWNERS, PERMIT2_ADDRESS } from "../utils/constants";
+import { SUPABASE_KEY, SUPABASE_URL, TOKENS, UBQ_OWNERS, PERMIT2_ADDRESS } from "../utils/constants";
 import { ethers } from "ethers";
 import { formatUnits } from "viem";
 import { getSupabaseData, loader } from "./utils";
@@ -15,7 +15,7 @@ const tokens = {
 };
 
 export class DataController {
-  sb = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+  sb = createClient(SUPABASE_URL, SUPABASE_KEY);
   userTxParser = new UserBlockTxParser();
 
   issueSigMap: Record<string, IssueOut> = {};
@@ -25,13 +25,12 @@ export class DataController {
   walletToIdMap = new Map<string, number>();
   users: User[] | null = [];
   userDict: Record<string, number> = {};
-  nonPermitEntries = [] as PermitEntry[];
+  nonUserPermits = [] as PermitEntry[];
   failedToPush: PermitEntry[] = [];
 
   singles: Record<string, FinalData> = {};
   doubles: Record<string, FinalData> = {};
   triples: Record<string, FinalData> = {};
-
 
   finalData: Record<string, FinalData[]> = {};
   nonceMap: Map<string, FinalData[]> = new Map();
@@ -40,15 +39,15 @@ export class DataController {
   async run() {
     const loader_ = loader();
     await this.gatherData();
-    console.log("Gathered data")
+    console.log("Gathered data");
     await this.matchAll();
-    console.log("Matched all")
+    console.log("Matched all");
     await this.findAndRemoveInvalidatedNonces();
-    console.log("Found and removed invalidated nonces")
+    console.log("Found and removed invalidated nonces");
     await this.leaderboard();
-    console.log("Calculated leaderboard")
+    console.log("Calculated leaderboard");
     await this.findUnspentPermits();
-    console.log("Found unspent permits")
+    console.log("Found unspent permits");
 
     clearInterval(loader_);
   }
@@ -99,7 +98,7 @@ export class DataController {
    * Finds transactions matching the `invalidateUnorderedNonces` method
    * from the four known UBQ owners and removes those nonces from the
    * final data.
-   * 
+   *
    * The new websocket providers resolve the "this should not happen" error
    * although this function from time to time may either take a long time
    * or hang indefinitely. Cancelling the script and restarting it seems to
@@ -331,7 +330,7 @@ export class DataController {
       }
     }
 
-    await writeFile("src/scripts/data/dc-non-permit-entries.json", JSON.stringify(this.nonPermitEntries, null, 2));
+    await writeFile("src/scripts/data/dc-non-user-entries.json", JSON.stringify(this.nonUserPermits, null, 2));
     await writeFile("src/scripts/data/dc-db-entries.json", JSON.stringify(dbEntries, null, 2));
     await writeFile("src/scripts/data/dc-final-data.json", JSON.stringify(newFinal, null, 2));
     await writeFile(
@@ -387,10 +386,14 @@ export class DataController {
 
     const tokenId = tokens[reward.permit.permitted.token.toLowerCase() as keyof typeof tokens];
     const to = reward.transferDetails.to.toLowerCase();
-    const deadline = reward.permit.deadline;
+    let deadline = reward.permit.deadline;
     const nonce = reward.permit.nonce;
     const amount = reward.permit.permitted.amount;
     const signature = reward.signature;
+
+    if (typeof deadline === "object") {
+      deadline = ethers.BigNumber.from(deadline).toString();
+    }
 
     const walletId = this.walletToIdMap.get(to.toLowerCase()) ?? this.walletToIdMap.get(to);
     if (!walletId) {
@@ -400,8 +403,8 @@ export class DataController {
     const user = this.userDict[walletId];
 
     if (!user) {
-      this.nonPermitEntries.push({
-        amount: amount.toString(),
+      this.nonUserPermits.push({
+        amount: ethers.utils.formatUnits(amount, 18),
         nonce,
         deadline,
         signature,
@@ -414,7 +417,7 @@ export class DataController {
     }
 
     return {
-      amount: amount.toString(),
+      amount: ethers.utils.formatUnits(amount, 18),
       nonce,
       deadline,
       signature,
@@ -474,7 +477,9 @@ export class DataController {
     await writeFile("src/scripts/data/dc-with-tx.json", JSON.stringify(thoseWithTx, null, 2));
 
     for (let i = 0; i < thoseWithTx.length; i++) {
+      if (i % 15 === 0) console.log("Pushed", i, "of", thoseWithTx.length);
       await this.pushToDB(thoseWithTx[i], i, highestId);
+      if (i === thoseWithTx.length - 1) console.log("Pushed", i, "of", thoseWithTx.length);
     }
 
     await writeFile("src/scripts/data/dc-failed-to-push.json", JSON.stringify(this.failedToPush, null, 2));
@@ -553,4 +558,6 @@ async function main() {
   await parser.run();
 }
 
-main().catch(console.error).finally(() => process.exit(0));
+main()
+  .catch(console.error)
+  .finally(() => process.exit(0));
