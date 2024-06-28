@@ -1,52 +1,3 @@
-export interface PaymentInfo {
-  issueNumber: number;
-  repoName: string;
-  paymentAmount: number;
-  currency: string;
-  payee?: string;
-  type?: string;
-  url: string;
-}
-
-export interface Repositories {
-  name: string;
-  isArchived: boolean;
-  lastCommitDate: string;
-}
-
-export interface Contributor {
-  [address: string]: number;
-}
-
-export interface NoPayments {
-  repoName: string;
-  archived: boolean;
-  lastCommitDate: string;
-  message: string;
-  url: string;
-}
-
-export interface CSVData {
-  contributors: Contributor;
-  allPayments: PaymentInfo[];
-  allNoAssigneePayments: PaymentInfo[];
-  noPayments: NoPayments[];
-  permits: Permits[];
-}
-
-export interface DebugData extends PaymentInfo {
-  comment: string;
-  permit: string;
-  issueCreator: string;
-  typeOfMatch: string;
-}
-
-export interface Permits {
-  repoName: string;
-  issueNumber: number;
-  url: string;
-}
-
 export interface PermitDetails {
   permit: {
     permitted: {
@@ -63,3 +14,65 @@ export interface PermitDetails {
   owner: string;
   signature: string;
 }
+
+export type Decoded = {
+  reward: PermitDetails;
+  txHash: string;
+  blockTimestamp: Date | string;
+};
+
+export type IssueOut = {
+  issueCreator: string;
+  issueAssignee: string;
+  issueNumber: number;
+  repoName: string;
+  timestamp: string;
+  claimUrl: string;
+  reward: PermitDetails;
+};
+
+export type FinalData = Decoded & IssueOut;
+
+export interface Repositories {
+  name: string;
+  isArchived: boolean;
+  lastCommitDate: string;
+}
+
+export type User = {
+  id: number;
+  wallet_id: number;
+};
+
+export type ScanResponse = {
+  blockNumber: string;
+  timeStamp: string;
+  hash: string;
+  nonce: string;
+  blockHash: string;
+  transactionIndex: string;
+  from: string;
+  to: string;
+  value: string;
+  gas: string;
+  gasPrice: string;
+  isError: string;
+  txreceipt_status: string;
+  input: string;
+  contractAddress: string;
+  cumulativeGasUsed: string;
+  gasUsed: string;
+  confirmations: string;
+  methodId: string;
+  functionName: string;
+};
+
+export type PermitEntry = {
+  amount: string;
+  nonce: string;
+  deadline: string;
+  signature: string;
+  token_id: number;
+  beneficiary_id: number;
+  transaction: string;
+};
