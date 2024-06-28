@@ -262,7 +262,6 @@ export class PaidIssueParser {
       }
     }
 
-
     return {
       claimUrl,
       claimantUsername,

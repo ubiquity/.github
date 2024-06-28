@@ -121,7 +121,11 @@ export class DataController {
       const filteredScans = scans.flat().filter((scan) => scan.methodId === "0x3ff9dcb1");
       if (filteredScans.length === 0) continue;
 
+      let count = 0;
       for (const scan of filteredScans) {
+        count++;
+        // this seems to help the hanging issue
+        console.log("Processing", count, "of", filteredScans.length);
         const invalidated = this.decodeInvalidate(scan);
         if (invalidated) {
           this.invalidatedNonces.push({
@@ -385,12 +389,11 @@ export class DataController {
     }
   }
   /**
-    * Converts legacy permits into the accepted format 
-    * to make for easy claiming.
-    */
+   * Converts legacy permits into the accepted format
+   * to make for easy claiming.
+   */
   rebuildPermitString(reward: PermitDetails) {
-
-    const { owner, permit, signature, transferDetails } = reward
+    const { owner, permit, signature, transferDetails } = reward;
     const { permitted } = permit;
 
     const token = permit.permitted.token.toLowerCase();
@@ -399,22 +402,21 @@ export class DataController {
       permit: {
         permitted: {
           amount: permitted.amount,
-          token: permitted.token
+          token: permitted.token,
         },
         deadline: permit.deadline,
-        nonce: permit.nonce
+        nonce: permit.nonce,
       },
       transferDetails: {
         to: transferDetails.to,
-        requestedAmount: transferDetails.requestedAmount
+        requestedAmount: transferDetails.requestedAmount,
       },
       networkId: token === TOKENS.DAI ? 1 : 100,
       owner: owner,
       signature: signature,
       // this is dirty but it works
-      type: token === TOKENS.DAI ? "erc20-permit" :
-        token === TOKENS.WXDAI ? "erc20-permit" : "erc721-permit"
-    }
+      type: token === TOKENS.DAI ? "erc20-permit" : token === TOKENS.WXDAI ? "erc20-permit" : "erc721-permit",
+    };
 
     const base64 = Buffer.from(JSON.stringify([obj])).toString("base64");
     return `https://pay.ubq.fi/?claim=${base64}`;

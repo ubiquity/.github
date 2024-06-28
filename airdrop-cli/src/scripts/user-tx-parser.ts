@@ -23,6 +23,9 @@ export class UserBlockTxParser {
   users: User[] = [];
   userSigPermits: Record<string, Decoded> = {};
 
+  ethBlock: number = 0;
+  gnosisBlock: number = 0;
+
   // cspell: disable-next-line
   constructor(gnosisApiKey = "WR9YP2CY3NG2WRX8FN5DCNKKIAGIIN83YN", etherscanApiKey = "JPHWVVUBAIP1UVQZSSDKV73YX48I2M7SWV") {
     this.gnosisApiKey = gnosisApiKey;
@@ -61,6 +64,9 @@ export class UserBlockTxParser {
       owners: UBQ_OWNERS,
       users: this.userWallets,
     };
+    const blocks = await this.getBlockNumbers();
+    this.ethBlock = blocks.eth;
+    this.gnosisBlock = blocks.gnosis;
 
     for (const [target, batch] of Object.entries(batches)) {
       const shouldUseFrom = target === "permit2";
@@ -112,15 +118,13 @@ export class UserBlockTxParser {
 
   async getChainTx(address: string, from?: number, to?: number, filter = true, chainId = 100): Promise<ScanResponse[]> {
     const chain = chainId === 1 ? "eth" : "gnosis";
-    const toBlock = to ?? (await this.getBlockNumbers())[chain];
+    const toBlock = to ?? chain === "eth" ? this.ethBlock : this.gnosisBlock;
     const fromBlock = chain === "eth" ? 10373290 : 15349006; // ~3yrs ago 29/05/2024
     let response = { result: [] || "Max rate limit reached" };
 
     try {
       const scanEntity = chain === "eth" ? "etherscan" : "gnosisscan";
-      const url = `https://api.${scanEntity}.io/api?module=account&action=txlist&address=${address}&startblock=${fromBlock}&endblock=${toBlock}&page=1&offset=1000&sort=asc&apikey=${
-        chain === "eth" ? this.etherscanApiKey : this.gnosisApiKey
-      }`;
+      const url = `https://api.${scanEntity}.io/api?module=account&action=txlist&address=${address}&startblock=${fromBlock}&endblock=${toBlock}&page=1&offset=1000&sort=asc&apikey=${chain === "eth" ? this.etherscanApiKey : this.gnosisApiKey}`;
       response = await (await fetch(url)).json();
     } catch (err) {
       console.error(err);
