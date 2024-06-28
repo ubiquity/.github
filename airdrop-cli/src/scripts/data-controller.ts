@@ -1,5 +1,5 @@
 import { UserBlockTxParser } from "./user-tx-parser";
-import { Decoded, FinalData, IssueOut, PermitEntry, ScanResponse, User } from "../types";
+import { Decoded, FinalData, IssueOut, PermitDetails, PermitEntry, ScanResponse, User } from "../types";
 import { writeFile } from "fs/promises";
 import { SUPABASE_KEY, SUPABASE_URL, TOKENS, UBQ_OWNERS, PERMIT2_ADDRESS } from "../utils/constants";
 import { ethers } from "ethers";
@@ -61,6 +61,11 @@ export class DataController {
       const unspentPermits = userFinalData.filter((permit) => !permit.txHash);
       const unclaimedPermits = unspentPermits.filter(async (permit) => {
         return await this.invalidateNonce(permit.reward.permit.nonce, permit.reward.owner, this.userTxParser.gnosisProvider);
+      });
+
+      unclaimedPermits.forEach((permit) => {
+        permit.claimUrl = this.rebuildPermitString(permit.reward) ?? "";
+        return permit;
       });
 
       unspent[user] = unclaimedPermits;
@@ -378,6 +383,41 @@ export class DataController {
     if (!dbEntries[repoName]) {
       dbEntries[repoName] = [];
     }
+  }
+  /**
+    * Converts legacy permits into the accepted format 
+    * to make for easy claiming.
+    */
+  rebuildPermitString(reward: PermitDetails) {
+
+    const { owner, permit, signature, transferDetails } = reward
+    const { permitted } = permit;
+
+    const token = permit.permitted.token.toLowerCase();
+
+    const obj = {
+      permit: {
+        permitted: {
+          amount: permitted.amount,
+          token: permitted.token
+        },
+        deadline: permit.deadline,
+        nonce: permit.nonce
+      },
+      transferDetails: {
+        to: transferDetails.to,
+        requestedAmount: transferDetails.requestedAmount
+      },
+      networkId: token === TOKENS.DAI ? 1 : 100,
+      owner: owner,
+      signature: signature,
+      // this is dirty but it works
+      type: token === TOKENS.DAI ? "erc20-permit" :
+        token === TOKENS.WXDAI ? "erc20-permit" : "erc721-permit"
+    }
+
+    const base64 = Buffer.from(JSON.stringify([obj])).toString("base64");
+    return `https://pay.ubq.fi/?claim=${base64}`;
   }
 
   // Convert our FinalData objects into a DB friendly format.
