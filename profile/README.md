@@ -2,6 +2,6 @@
 
 ### Welcome to Ubiquity DAO
 
-Contribute by joining the [DevPool](https://dao.ubq.fi/devpool)
+We are fully open source. You can contribute by joining the [DevPool](https://dao.ubq.fi/devpool).
 
-Introduce us to other projects and get a reward!
+Our other GitHub organizations are [Ubiquity OS](https://github.com/ubiquity-os) and [Ubiquity OS Marketplace](https://github.com/ubiquity-os-marketplace).
