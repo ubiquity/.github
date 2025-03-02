@@ -1,0 +1,11 @@
+{
+    "ignored_files": [
+        ".env.example",
+        "README.md",
+        "build",
+        "cypress",
+        "src",
+        "static",
+        "tests"
+    ]
+}

@@ -5,43 +5,174 @@ on:
     - cron: '0 0 14 * *'
   workflow_dispatch:
     inputs:
-      file_paths:
-        description: 'Comma-separated list of extra paths to sync, for example: .eslintrc,.prettierrc,.github'
+      ignored_files_config:
+        description: 'Path to a JSON configuration file containing list of ignored files'
         required: false
-      organizations:
-        description: 'Organizations to be synced (comma-separated list)'
-        required: false
-        default: 'ubiquity'
+        default: 'sync-template/config.json'
         type: string
-      repositories:
-        description: 'Repositories to be synced(comma-separated list)'
+      additional_ignored_files:
+        description: 'Additional files not to be synced'
         required: false
+        default: ''
+        type: string
+      target_repository:
+        description: 'Repository to be synced'
+        required: true
         default: ''
         type: string
 
 jobs:
-  sync:
+  sync-template:
     runs-on: ubuntu-latest
     permissions:
       actions: write
       contents: write
       pull-requests: write
     steps:
-      - name: Check if repository is ts-template
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'
+
+      - name: Install python dependencies
         run: |
-          if [[ "${{ github.repository }}" == "ubiquity/ts-template" ]]; then
-            echo "Skipping sync: this is the template repository."
-            exit 0
-          fi
-      - name: Checkout
+          python -m pip install --upgrade pip
+          pip install anthropic
+      
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.PAT }} # Personal Access Token (PAT) with repo scope
+          token: ${{ secrets.PAT }}
 
-      - name: Get GitHub App token
-        uses: tibdex/github-app-token@v1.7.0
-        id: get_installation_token
+      - name: Checkout target repository
+        uses: actions/checkout@v4
         with:
-          app_id: ${{ secrets.APP_ID }}
-          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+          repository: ${{ github.event.inputs.target_repository }}
+          fetch-depth: 0
+          token: ${{ secrets.PAT }}
+          path: 'target-to-synced'
+          
+      - name: Parse configuration
+        id: config
+        run: |
+          CONFIG_FILE="${{ github.event.inputs.ignored_files_config || 'sync-template/config.json' }}"
+          echo "Using configuration file: $CONFIG_FILE"
+          
+          if [ -f "$CONFIG_FILE" ]; then
+            # Read and parse the configuration file
+            IGNORED_FILES=$(jq -r '.ignored_files | join(" ")' "$CONFIG_FILE")
+            
+            # Set outputs
+            echo "ignored_files=$IGNORED_FILES" >> $GITHUB_OUTPUT    
+            echo "Configuration loaded successfully"
+          else
+            echo "Warning: Configuration file not found at $CONFIG_FILE"
+            echo "Using default values"
+            
+            # Set default values
+            echo "file_paths=bun.lock yarn.lock src static tests .env.example cypress README.md build" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Sync template repository
+        env: 
+          IGNORED_FILES: ${{ steps.config.outputs.ignored_files }} ${{ inputs.additional_ignored_files}}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          echo $IGNORED_FILES
+          cd target-to-synced
+          branch_name=$(git rev-parse --abbrev-ref HEAD)
+          pr_branch="sync-template/${branch_name}"
+          
+          git config --global user.email "ubiquity-os[bot]@users.noreply.github.com"
+          git config --global user.name "ubiquity-os[bot]"
+
+          git remote add template https://github.com/ubiquity/ts-template.git
+          git fetch template
+
+          git checkout -b "$pr_branch"
+
+          # Execute git merge
+          merge_output=$(git merge --squash template/development --allow-unrelated-histories || true)
+
+          # Remove new files
+          all_changes=$(git status -s | grep "^A " | awk '{print $2}')
+          for all_change in $all_changes; do
+            # Remove folder
+            prefix=$(echo "$all_change" | cut -d'/' -f1)
+            if (printf "%s\n" "${IGNORED_FILES[@]}" | grep -qi "$prefix"); then
+              git rm -f $all_change
+            fi
+
+            # Check if the filename is in IGNORED_FILES
+            file_name=$(basename "$all_change")
+            if (printf "%s\n" "${IGNORED_FILES[@]}" | grep -qi "$file_name"); then
+              git rm -f $all_change
+            fi
+          done
+
+          # Check for merge conflicts
+          if echo "$merge_output" | grep "CONFLICT"; then
+            echo "Merge conflicts detected. Parsing output..."
+            # Parse the output of git merge for conflict files
+            conflict_files=$(echo "$merge_output" | grep "CONFLICT" | awk '{print $6}')
+            
+            # Output the list of files with merge conflicts
+            if [ -z "$conflict_files" ]; then
+                echo "No conflict files found."
+            else
+                for conflict_file in $conflict_files; do
+                  prefix=$(echo "$conflict_file" | cut -d'/' -f1)
+                  if (printf "%s\n" "${IGNORED_FILES[@]}" | grep -qi "$prefix"); then
+                    echo "Checking out HEAD version: " $conflict_file
+                    git checkout development -- $conflict_file
+                  else
+                    payload=$(sed -z 's/\n/\\n/g; s/..$//' $conflict_file)
+                    echo "Fixing merge conflict: " $conflict_file
+
+                    python3 ../sync-template/claude_fix_merge_conflict.py $conflict_file
+
+                    echo $conflict_file
+                    cat $conflict_file
+                    
+                  fi
+                done
+            fi
+          else
+            echo "Merge completed successfully with no conflicts."
+          fi
+
+          rm -f yarn.lock
+          bun install || true
+
+      - name: Create PR
+        env:
+          PAT_TOKEN: ${{ secrets.PAT }}
+        run: |
+          cd target-to-synced
+          
+          branch_name=$(git rev-parse --abbrev-ref HEAD)
+          original_remote=$(git remote get-url origin)
+          pr_branch=${branch_name}
+
+          # Check if there are any changes
+          if git diff --staged --quiet && git diff --quiet; then
+            echo "No changes to sync from template."
+            exit 0
+          fi
+
+          # Commit changes, even if there are conflicts
+          git commit -am "chore: sync template (with potential conflicts)" || true
+
+          # Push changes and create PR
+          git push -f "$original_remote" "$pr_branch"
+          echo "${{ secrets.PAT }}" | gh auth login --with-token
+          gh pr create --title "Sync ts-template repository (manual resolution required)" \
+                      --body "This pull request merges changes from the template repository. There may be conflicts that require manual resolution." \
+                      --head "$pr_branch" \
+                      --base "development" || true
+
+
