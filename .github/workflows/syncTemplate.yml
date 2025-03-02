@@ -1,0 +1,47 @@
+name: Sync template repository to branch
+
+on:
+  schedule:
+    - cron: '0 0 14 * *'
+  workflow_dispatch:
+    inputs:
+      file_paths:
+        description: 'Comma-separated list of extra paths to sync, for example: .eslintrc,.prettierrc,.github'
+        required: false
+      organizations:
+        description: 'Organizations to be synced (comma-separated list)'
+        required: false
+        default: 'ubiquity'
+        type: string
+      repositories:
+        description: 'Repositories to be synced(comma-separated list)'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Check if repository is ts-template
+        run: |
+          if [[ "${{ github.repository }}" == "ubiquity/ts-template" ]]; then
+            echo "Skipping sync: this is the template repository."
+            exit 0
+          fi
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT }} # Personal Access Token (PAT) with repo scope
+
+      - name: Get GitHub App token
+        uses: tibdex/github-app-token@v1.7.0
+        id: get_installation_token
+        with:
+          app_id: ${{ secrets.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
