@@ -3,7 +3,7 @@
     "organizations": [
         "ubiquity"
     ],
-    "whilelisted_files": [
+    "whitelisted_files": [
         ".github/*",
         ".husky/*",
         ".gitattributes",
