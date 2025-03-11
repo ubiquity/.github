@@ -5,9 +5,7 @@ filename = sys.argv[1]
 
 output = b''
 with open(filename, 'rb') as file:
-    lines = file.readlines()
-    for line in lines:
-        output += line
+    output = file.read()
 
 client = anthropic.Anthropic()
 
@@ -61,6 +59,9 @@ message = client.messages.create(
     ],
 )
 
-with open(filename, 'w') as file:
-    file.write(message.content[0].text + '\n')
+if message and isinstance(message.content, list) and message.content:
+  text = getattr(message.content[0], "text", None)
+  if isinstance(text, str):
+    with open(filename, 'w') as file:
+      file.write(text + '\n')
 

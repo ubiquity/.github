@@ -5,12 +5,12 @@ on:
     - cron: '0 0 14 * *'
   workflow_dispatch:
     inputs:
-      ignored_files_config:
-        description: 'Path to a JSON configuration file containing list of ignored files'
+      config_file:
+        description: 'Path to a JSON configuration file'
         required: false
         default: 'sync-template/config.json'
         type: string
-      additional_ignored_files:
+      additional_whitelisted_files:
         description: 'Additional files not to be synced'
         required: false
         default: ''
@@ -19,6 +19,10 @@ on:
         description: 'Repository to be synced'
         required: true
         default: ''
+        type: string
+      base_branch:
+        required: true
+        default: 'development'
         type: string
 
 jobs:
@@ -30,24 +34,18 @@ jobs:
       pull-requests: write
     steps:
       - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: '3.8'
-
-      - name: Install python dependencies
+        uses: actions/setup-python@v5
+      - name: Install python dependencies and anthropic
         run: |
           python -m pip install --upgrade pip
           pip install anthropic
-      
       - name: Set up bun
         uses: oven-sh/setup-bun@v2
-
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.PAT }}
-
       - name: Checkout target repository
         uses: actions/checkout@v4
         with:
@@ -55,34 +53,37 @@ jobs:
           fetch-depth: 0
           token: ${{ secrets.PAT }}
           path: 'target-to-synced'
-          
+
       - name: Parse configuration
         id: config
         run: |
-          CONFIG_FILE="${{ github.event.inputs.ignored_files_config || 'sync-template/config.json' }}"
+          CONFIG_FILE="${{ github.event.inputs.config_file || 'sync-template/config.json' }}"
           echo "Using configuration file: $CONFIG_FILE"
           
           if [ -f "$CONFIG_FILE" ]; then
             # Read and parse the configuration file
-            IGNORED_FILES=$(jq -r '.ignored_files | join(" ")' "$CONFIG_FILE")
+            WHITELISTED_FILES=$(jq -r '.whitelisted_files | join(" ")' "$CONFIG_FILE")
             
             # Set outputs
-            echo "ignored_files=$IGNORED_FILES" >> $GITHUB_OUTPUT    
+            echo "whitelisted_files=$WHITELISTED_FILES" >> $GITHUB_OUTPUT    
             echo "Configuration loaded successfully"
           else
             echo "Warning: Configuration file not found at $CONFIG_FILE"
             echo "Using default values"
             
             # Set default values
-            echo "file_paths=bun.lock yarn.lock src static tests .env.example cypress README.md build" >> $GITHUB_OUTPUT
+            echo "whitelisted_files=.github/* .husky/* .gitattributes .gitignore .nvmrc .prettierrc \
+              .yarnrc.yml .cypress.config.ts eslint.config.mjs jest.config.json package.json \
+              tsconfig.json" >> $GITHUB_OUTPUT
           fi
+
+          echo $GITHUB_OUTPUT
 
       - name: Sync template repository
         env: 
-          IGNORED_FILES: ${{ steps.config.outputs.ignored_files }} ${{ inputs.additional_ignored_files}}
+          WHITELISTED_FILES: ${{ steps.config.outputs.whitelisted_files }} ${{ inputs.additional_whitelisted_files}}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          echo $IGNORED_FILES
           cd target-to-synced
           branch_name=$(git rev-parse --abbrev-ref HEAD)
           pr_branch="sync-template/${branch_name}"
@@ -91,25 +92,30 @@ jobs:
           git config --global user.name "ubiquity-os[bot]"
 
           git remote add template https://github.com/ubiquity/ts-template.git
-          git fetch template
+          git fetch ${inputs.base_branch}
 
           git checkout -b "$pr_branch"
 
           # Execute git merge
-          merge_output=$(git merge --squash template/development --allow-unrelated-histories || true)
+          merge_output=$(git merge --squash template/${inputs.base_branch} --allow-unrelated-histories || true)
 
-          # Remove new files
+          # Enable extended globbing and recursive glob matching
+          shopt -s extglob globstar
+
+          matches_whitelisted() {
+            local file="$1"
+            for pattern in "${WHITELISTED_FILES[@]}"; do
+                if [[ "$file" == $pattern ]]; then
+                    return 0  # Match found
+                fi
+            done
+            return 1  # No match
+          }
+
+          # Check new files and remove them if not in the whitelisted list
           all_changes=$(git status -s | grep "^A " | awk '{print $2}')
-          for all_change in $all_changes; do
-            # Remove folder
-            prefix=$(echo "$all_change" | cut -d'/' -f1)
-            if (printf "%s\n" "${IGNORED_FILES[@]}" | grep -qi "$prefix"); then
-              git rm -f $all_change
-            fi
-
-            # Check if the filename is in IGNORED_FILES
-            file_name=$(basename "$all_change")
-            if (printf "%s\n" "${IGNORED_FILES[@]}" | grep -qi "$file_name"); then
+          for change in $all_changes; do
+            if ! matches_whitelisted "$change"; then
               git rm -f $all_change
             fi
           done
@@ -125,19 +131,12 @@ jobs:
                 echo "No conflict files found."
             else
                 for conflict_file in $conflict_files; do
-                  prefix=$(echo "$conflict_file" | cut -d'/' -f1)
-                  if (printf "%s\n" "${IGNORED_FILES[@]}" | grep -qi "$prefix"); then
+                  if ! matches_whitelisted "$conflict_file"; then
                     echo "Checking out HEAD version: " $conflict_file
                     git checkout development -- $conflict_file
                   else
-                    payload=$(sed -z 's/\n/\\n/g; s/..$//' $conflict_file)
                     echo "Fixing merge conflict: " $conflict_file
-
-                    python3 ../sync-template/claude_fix_merge_conflict.py $conflict_file
-
-                    echo $conflict_file
-                    cat $conflict_file
-                    
+                    # python3 ../sync-template/claude_fix_merge_conflict.py $conflict_file                    
                   fi
                 done
             fi
