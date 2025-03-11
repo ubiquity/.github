@@ -77,27 +77,28 @@ jobs:
               tsconfig.json" >> $GITHUB_OUTPUT
           fi
 
-          echo $GITHUB_OUTPUT
+          echo $WHITELISTED_FILES
 
       - name: Sync template repository
         env: 
-          WHITELISTED_FILES: ${{ steps.config.outputs.whitelisted_files }} ${{ inputs.additional_whitelisted_files}}
+          WHITELISTED_FILES: ${{ steps.config.outputs.whitelisted_files }} ${{ github.event.inputs.additional_whitelisted_files}}
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           cd target-to-synced
           branch_name=$(git rev-parse --abbrev-ref HEAD)
           pr_branch="sync-template/${branch_name}"
+          base_branch="${{ github.event.inputs.base_branch }}"
           
           git config --global user.email "ubiquity-os[bot]@users.noreply.github.com"
           git config --global user.name "ubiquity-os[bot]"
 
           git remote add template https://github.com/ubiquity/ts-template.git
-          git fetch ${inputs.base_branch}
+          git fetch template
 
           git checkout -b "$pr_branch"
 
           # Execute git merge
-          merge_output=$(git merge --squash template/${inputs.base_branch} --allow-unrelated-histories || true)
+          merge_output=$(git merge --squash template/${base_branch} --allow-unrelated-histories || true)
 
           # Enable extended globbing and recursive glob matching
           shopt -s extglob globstar
