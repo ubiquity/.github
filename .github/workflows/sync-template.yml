@@ -1,0 +1,174 @@
+name: Sync template repository to branch
+
+on:
+  schedule:
+    - cron: '0 0 14 * *'
+  workflow_dispatch:
+    inputs:
+      config_file:
+        description: 'Path to a JSON configuration file'
+        required: false
+        default: '.github/sync-template-config.json'
+        type: string
+      additional_whitelisted_files:
+        description: 'Additional files not to be synced'
+        required: false
+        default: ''
+        type: string
+      target_repository:
+        description: 'Repository to be synced'
+        required: true
+        default: ''
+        type: string
+      base_branch:
+        required: true
+        default: 'development'
+        type: string
+
+jobs:
+  sync-template:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT }}
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install dependencies
+        run: bun install
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.inputs.target_repository }}
+          fetch-depth: 0
+          token: ${{ secrets.PAT }}
+          path: 'target-to-synced'
+
+      - name: Parse configuration
+        id: config
+        run: |
+          CONFIG_FILE="${{ github.event.inputs.config_file || '.github/sync-template-config.json' }}"
+          echo "Using configuration file: $CONFIG_FILE"
+          
+          if [ -f "$CONFIG_FILE" ]; then
+            # Read and parse the configuration file
+            WHITELISTED_FILES=$(jq -r '.whitelisted_files | join(" ")' "$CONFIG_FILE")
+            
+            # Set outputs
+            echo "whitelisted_files=$WHITELISTED_FILES" >> $GITHUB_OUTPUT    
+            echo "Configuration loaded successfully"
+          else
+            echo "Warning: Configuration file not found at $CONFIG_FILE"
+            echo "Using default values"
+            
+            # Set default values
+            echo "whitelisted_files=.github/* .husky/* .gitattributes .gitignore .nvmrc .prettierrc \
+              .yarnrc.yml .cypress.config.ts eslint.config.mjs jest.config.json package.json \
+              tsconfig.json" >> $GITHUB_OUTPUT
+          fi
+
+          echo $WHITELISTED_FILES
+
+      - name: Sync template repository
+        env: 
+          WHITELISTED_FILES: ${{ steps.config.outputs.whitelisted_files }} ${{ github.event.inputs.additional_whitelisted_files}}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          cd target-to-synced
+          branch_name=$(git rev-parse --abbrev-ref HEAD)
+          pr_branch="sync-template/${branch_name}"
+          base_branch="${{ github.event.inputs.base_branch }}"
+          
+          git config --global user.email "ubiquity-os[bot]@users.noreply.github.com"
+          git config --global user.name "ubiquity-os[bot]"
+
+          git remote add template https://github.com/ubiquity/ts-template.git
+          git fetch template
+
+          git checkout -b "$pr_branch"
+
+          # Execute git merge
+          merge_output=$(git merge --squash template/${base_branch} --allow-unrelated-histories || true)
+
+          # Enable extended globbing and recursive glob matching
+          shopt -s extglob globstar
+
+          matches_whitelisted() {
+            local file="$1"
+            for pattern in "${WHITELISTED_FILES[@]}"; do
+                if [[ "$file" == $pattern ]]; then
+                    return 0  # Match found
+                fi
+            done
+            return 1  # No match
+          }
+
+          # Check new files and remove them if not in the whitelisted list
+          all_changes=$(git status -s | grep "^A " | awk '{print $2}')
+          for change in $all_changes; do
+            if ! matches_whitelisted "$change"; then
+              git rm -f $change
+            fi
+          done
+
+          # Check for merge conflicts
+          if echo "$merge_output" | grep "CONFLICT"; then
+            echo "Merge conflicts detected. Parsing output..."
+            # Parse the output of git merge for conflict files
+            conflict_files=$(echo "$merge_output" | grep "CONFLICT" | awk '{print $6}')
+            
+            # Output the list of files with merge conflicts
+            if [ -z "$conflict_files" ]; then
+                echo "No conflict files found."
+            else
+                for conflict_file in $conflict_files; do
+                  if ! matches_whitelisted "$conflict_file"; then
+                    echo "Checking out HEAD version: " $conflict_file
+                    git checkout development -- $conflict_file
+                  else
+                    echo "Fixing merge conflict: " $conflict_file
+                    # python3 ../sync-template/claude_fix_merge_conflict.py $conflict_file                    
+                  fi
+                done
+            fi
+          else
+            echo "Merge completed successfully with no conflicts."
+          fi
+
+          rm -f yarn.lock
+          bun install || true
+
+      - name: Create PR
+        env:
+          PAT_TOKEN: ${{ secrets.PAT }}
+        run: |
+          cd target-to-synced
+          
+          branch_name=$(git rev-parse --abbrev-ref HEAD)
+          original_remote=$(git remote get-url origin)
+          pr_branch=${branch_name}
+
+          # Check if there are any changes
+          if git diff --staged --quiet && git diff --quiet; then
+            echo "No changes to sync from template."
+            exit 0
+          fi
+
+          # Commit changes, even if there are conflicts
+          git commit -am "chore: sync template (with potential conflicts)" || true
+
+          # Push changes and create PR
+          git push -f "$original_remote" "$pr_branch"
+          echo "${{ secrets.PAT }}" | gh auth login --with-token
+          gh pr create --title "Sync ts-template repository (manual resolution required)" \
+                      --body "This pull request merges changes from the template repository. There may be conflicts that require manual resolution." \
+                      --head "$pr_branch" \
+                      --base "development" || true
+
+
