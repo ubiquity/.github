@@ -8,7 +8,7 @@ on:
       config_file:
         description: 'Path to a JSON configuration file'
         required: false
-        default: 'sync-template/config.json'
+        default: '.github/sync-template-config.json'
         type: string
       additional_whitelisted_files:
         description: 'Additional files not to be synced'
@@ -33,19 +33,15 @@ jobs:
       contents: write
       pull-requests: write
     steps:
-      - name: Set up Python
-        uses: actions/setup-python@v5
-      - name: Install python dependencies and anthropic
-        run: |
-          python -m pip install --upgrade pip
-          pip install anthropic
-      - name: Set up bun
-        uses: oven-sh/setup-bun@v2
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
           token: ${{ secrets.PAT }}
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+      - name: Install dependencies
+        run: bun install
       - name: Checkout target repository
         uses: actions/checkout@v4
         with:
@@ -57,7 +53,7 @@ jobs:
       - name: Parse configuration
         id: config
         run: |
-          CONFIG_FILE="${{ github.event.inputs.config_file || 'sync-template/config.json' }}"
+          CONFIG_FILE="${{ github.event.inputs.config_file || '.github/sync-template-config.json' }}"
           echo "Using configuration file: $CONFIG_FILE"
           
           if [ -f "$CONFIG_FILE" ]; then
@@ -117,7 +113,7 @@ jobs:
           all_changes=$(git status -s | grep "^A " | awk '{print $2}')
           for change in $all_changes; do
             if ! matches_whitelisted "$change"; then
-              git rm -f $all_change
+              git rm -f $change
             fi
           done
 
