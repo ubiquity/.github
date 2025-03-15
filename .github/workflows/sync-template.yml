@@ -86,7 +86,7 @@ jobs:
       - name: Sync template repository
         env: 
           WHITELISTED_FILES: "${{ steps.config.outputs.whitelisted_files }} ${{ github.event.inputs.additional_whitelisted_files}}"
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
         run: |
           cd target-to-synced
           branch_name=$(git rev-parse --abbrev-ref HEAD)
