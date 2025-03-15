@@ -17,10 +17,10 @@ jobs:
       repositories: ${{ steps.config.outputs.repositories }}
     steps:
       - name: Checkout repository
-          uses: actions/checkout@v4
-          with:
-            fetch-depth: 0
-            token: ${{ secrets.PAT }}
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.PAT }}
       - name: Parse repositories from configuration file
         id: config
         run: |
