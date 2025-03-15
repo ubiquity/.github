@@ -1,6 +1,18 @@
 name: Sync template repository to branch
 
 on:
+  workflow_call:
+    inputs:
+      config_file:
+        description: 'Path to a JSON configuration file'
+        required: false
+        default: '.github/sync-template-config.json'
+        type: string
+      target_repository:
+        description: 'Repository to be synced'
+        required: true
+        default: ''
+        type: string
   workflow_dispatch:
     inputs:
       config_file:
@@ -8,19 +20,15 @@ on:
         required: false
         default: '.github/sync-template-config.json'
         type: string
-      additional_whitelisted_files:
-        description: 'Additional files not to be synced'
-        required: false
-        default: ''
-        type: string
       target_repository:
         description: 'Repository to be synced'
         required: true
         default: ''
         type: string
-      base_branch:
-        required: true
-        default: 'development'
+      additional_whitelisted_files:
+        description: 'Additional files not to be synced'
+        required: false
+        default: ''
         type: string
 
 jobs:
@@ -59,8 +67,10 @@ jobs:
           if [ -f "$CONFIG_FILE" ]; then
             # Read and parse the configuration file
             WHITELISTED_FILES=$(jq -r '.whitelisted_files | join(" ")' "$CONFIG_FILE")
-            
+            BASE_BRANCH=$(jq -r '.base_branch' "$CONFIG_FILE")
+
             # Set outputs
+            echo "base_branch=$BASE_BRANCH" >> $GITHUB_OUTPUT
             echo "whitelisted_files=$WHITELISTED_FILES" >> $GITHUB_OUTPUT    
             echo "Configuration loaded successfully"
           else
@@ -68,6 +78,7 @@ jobs:
             echo "Using default values"
             
             # Set default values
+            echo "base_branch=development" >> $GITHUB_OUTPUT
             echo "whitelisted_files=.github/* .husky/* .gitattributes .gitignore .nvmrc .prettierrc \
               .yarnrc.yml .cypress.config.ts eslint.config.mjs jest.config.json package.json \
               tsconfig.json" >> $GITHUB_OUTPUT
@@ -81,7 +92,7 @@ jobs:
           cd target-to-synced
           branch_name=$(git rev-parse --abbrev-ref HEAD)
           pr_branch="sync-template/${branch_name}"
-          base_branch="${{ github.event.inputs.base_branch }}"
+          base_branch="${{ step.config.outputs.base_branch }}"
           
           git config --global user.email "ubiquity-os[bot]@users.noreply.github.com"
           git config --global user.name "ubiquity-os[bot]"

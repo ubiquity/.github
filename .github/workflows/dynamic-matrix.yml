@@ -53,11 +53,11 @@ jobs:
 
   run-matrix:
     needs: prepare
-    runs-on: ubuntu-latest
     strategy:
       matrix: 
         repository: ${{ fromJson(needs.prepare.outputs.repositories) }}
       fail-fast: false
       max-parallel: 15
-    steps:
-      - run: echo "${{ matrix.repository }}" # this will print the repo name
+    uses: ./.github/workflows/sync-template.yml
+    with:
+      target_repository: ${{ matrix.repository }}
