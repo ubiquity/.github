@@ -14,18 +14,13 @@ on:
 
   workflow_dispatch:
     inputs:
-      config_file:
-        description: 'Path to a JSON configuration file'
-        required: false
-        default: '.github/sync-template-config.json'
-        type: string
       target_repository:
         description: 'Repository to be synced'
         required: true
         default: ''
         type: string
       additional_whitelisted_files:
-        description: 'Additional files not to be synced'
+        description: 'Additional files to be synced'
         required: false
         default: ''
         type: string
@@ -60,7 +55,7 @@ jobs:
       - name: Parse configuration
         id: config
         run: |
-          CONFIG_FILE="${{ github.event.inputs.config_file || '.github/sync-template-config.json' }}"
+          CONFIG_FILE=".github/sync-template-config.json"
           echo "Using configuration file: $CONFIG_FILE"
           
           if [ -f "$CONFIG_FILE" ]; then
