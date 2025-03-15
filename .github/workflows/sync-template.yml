@@ -1,8 +1,6 @@
 name: Sync template repository to branch
 
 on:
-  schedule:
-    - cron: '0 0 14 * *'
   workflow_dispatch:
     inputs:
       config_file:
