@@ -4,8 +4,8 @@
     "organizations": [
     ],
     "repositories": [
-        "ariesgun/work.ubq.fi",
-        "ariesgun/safe.ubq.fi"
+        "ubiquity/work.ubq.fi",
+        "ubiquity/safe.ubq.fi"
     ],
     "whitelisted_files": [
         ".github/empty-string-checker.ts",
