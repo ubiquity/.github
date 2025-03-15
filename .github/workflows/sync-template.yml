@@ -92,7 +92,7 @@ jobs:
           cd target-to-synced
           branch_name=$(git rev-parse --abbrev-ref HEAD)
           pr_branch="sync-template/${branch_name}"
-          base_branch="${{ step.config.outputs.base_branch }}"
+          base_branch="${{ steps.config.outputs.base_branch }}"
           
           git config --global user.email "ubiquity-os[bot]@users.noreply.github.com"
           git config --global user.name "ubiquity-os[bot]"
