@@ -1,9 +1,17 @@
 {
+    "template_repository": "ubiquity/ts-template",
     "base_branch": "development",
     "organizations": [
-        "ubiquity"
+    ],
+    "repositories": [
+        "ariesgun/work.ubq.fi",
+        "ariesgun/safe.ubq.fi"
     ],
     "whitelisted_files": [
+        ".github/empty-string-checker.ts",
+        ".github/pull_request_template.md",
+        ".husky/*",
+        "eslint.config.mjs",
         "package.json"
     ]
 }
