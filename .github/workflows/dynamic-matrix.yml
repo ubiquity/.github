@@ -1,0 +1,64 @@
+name: dynamic-matrix
+on:
+  schedule:
+    - cron: '0 0 14 * *'
+  workflow_dispatch:
+    inputs:
+      config_file:
+        description: 'Path to a JSON configuration file'
+        required: false
+        default: '.github/sync-template-config.json'
+        type: string
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      repositories: ${{ steps.config.outputs.repositories }}
+    steps:
+      - name: Checkout repository
+          uses: actions/checkout@v4
+          with:
+            fetch-depth: 0
+            token: ${{ secrets.PAT }}
+      - name: Parse repositories from configuration file
+        id: config
+        run: |
+          pwd
+          CONFIG_FILE="${{ github.event.inputs.config_file || '.github/sync-template-config.json' }}"
+          echo "Using configuration file: $CONFIG_FILE"
+          
+          if [ -f "$CONFIG_FILE" ]; then
+          
+            echo "$CONFIG_FILE"
+            # Read and parse the configuration file
+            TEMPLATE_REPO=$(jq -rc '.template_repository' "$CONFIG_FILE")
+            REPOSITORIES=$(jq -rc '.repositories' "$CONFIG_FILE")
+
+            echo "$REPOSITORIES"
+            
+            # Check if there is any repositories else load from organizations
+            echo "$REPOSITORIES" | jq -e 'length > 0' > /dev/null
+            if [ $? -eq 1 ]; then
+              REPOSITORIES=$(curl -s "https://api.github.com/users/ubiquity/repos?per_page=100" | jq -rc --arg TEMPLATE_REPO $TEMPLATE_REPO '[.[] | select(.full_name != $TEMPLATE_REPO) | .full_name]')
+            fi
+            
+            # Set outputs
+            echo "repositories=$REPOSITORIES" >> $GITHUB_OUTPUT    
+            echo "Configuration loaded successfully"
+          fi
+      - run: echo $JSON_STRING
+        env:
+          JSON_STRING: ${{ steps.config.outputs.repositories }}
+
+
+  run-matrix:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: 
+        repository: ${{ fromJson(needs.prepare.outputs.repositories) }}
+      fail-fast: false
+      max-parallel: 15
+    steps:
+      - run: echo "${{ matrix.repository }}" # this will print the repo name
