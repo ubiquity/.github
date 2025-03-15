@@ -41,7 +41,9 @@ jobs:
       - name: Set up bun
         uses: oven-sh/setup-bun@v2
       - name: Install dependencies
-        run: bun install
+        run: |
+          cd sync-template-cli
+          bun install
       - name: Checkout target repository
         uses: actions/checkout@v4
         with:
@@ -73,11 +75,9 @@ jobs:
               tsconfig.json" >> $GITHUB_OUTPUT
           fi
 
-          echo $WHITELISTED_FILES
-
       - name: Sync template repository
         env: 
-          WHITELISTED_FILES: ${{ steps.config.outputs.whitelisted_files }} ${{ github.event.inputs.additional_whitelisted_files}}
+          WHITELISTED_FILES: "${{ steps.config.outputs.whitelisted_files }} ${{ github.event.inputs.additional_whitelisted_files}}"
           ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
           cd target-to-synced
@@ -99,10 +99,13 @@ jobs:
           # Enable extended globbing and recursive glob matching
           shopt -s extglob globstar
 
+          # Convert into a list of whitelisted files
+          read -a WHITELISTED_ARRAY <<< "$WHITELISTED_FILES"
+
           matches_whitelisted() {
             local file="$1"
-            for pattern in "${WHITELISTED_FILES[@]}"; do
-                if [[ "$file" == $pattern ]]; then
+            for pattern in "${WHITELISTED_ARRAY[@]}"; do
+                if [[ $file == $pattern ]]; then
                     return 0  # Match found
                 fi
             done
@@ -133,7 +136,7 @@ jobs:
                     git checkout development -- $conflict_file
                   else
                     echo "Fixing merge conflict: " $conflict_file
-                    # python3 ../sync-template/claude_fix_merge_conflict.py $conflict_file                    
+                    bun ../sync-template-cli/src/index.ts $conflict_file
                   fi
                 done
             fi
@@ -141,8 +144,13 @@ jobs:
             echo "Merge completed successfully with no conflicts."
           fi
 
+      - name: Create bun.lock file
+        run: |
+          cd target-to-synced
+
           rm -f yarn.lock
           bun install || true
+          git add bun.lock || true
 
       - name: Create PR
         env:

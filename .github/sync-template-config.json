@@ -4,17 +4,6 @@
         "ubiquity"
     ],
     "whitelisted_files": [
-        ".github/*",
-        ".husky/*",
-        ".gitattributes",
-        ".gitignore",
-        ".nvmrc",
-        ".prettierrc",
-        ".yarnrc.yml",
-        ".cypress.config.ts",
-        "eslint.config.mjs",
-        "jest.config.json",
-        "package.json",
-        "tsconfig.json"
+        "package.json"
     ]
 }

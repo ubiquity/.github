@@ -1,0 +1,40 @@
+name: dynamic-matrix
+on:
+  workflow_dispatch:
+    inputs:
+      config_file:
+        description: 'Path to a JSON configuration file'
+        required: false
+        default: '.github/sync-template-config.json'
+        type: string
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      repositories: ${{ steps.json.outputs.repositories }}
+    steps:
+      - name: Build matrix
+        uses: actions/github-script@v7
+        id: json
+        with:
+          run: |
+            response=$(curl -s "https://api.github.com/users/ubiquity/repos?per_page=100")
+            echo "::set-output name=repositories::$response"
+        env:
+          REPOSITORIES: ${{ steps.parse-issue-body.outputs.issueparser_repositories }}
+      - run: echo $JSON_STRING
+        env:
+          JSON_STRING: ${{ steps.json.outputs.jsonString }}
+
+
+  run-matrix:
+    needs: prepare
+    runs-on: ubuntu-latest
+    strategy:
+      matrix: 
+        repository: ${{ fromJson(needs.prepare.outputs.repositories) }}
+      fail-fast: false
+      max-parallel: 15
+    steps:
+      - run: echo "${{ matrix.repository }}" # this will print the repo name

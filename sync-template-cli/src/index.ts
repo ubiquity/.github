@@ -21,6 +21,8 @@ You analyze and resolve Git merge conflicts automatically. When presented with c
    - For package.json:
      - Retain the name, version, description, main, author and license fields from the HEAD version without any changes.
      - Compare dependencies and devDependencies between the HEAD and incoming changes and always choose the latest version.
+     - If there is any duplicate dependency in the dependencies section, remove the duplicated one.
+     - If there is any duplicate dependency in both the dependencies and devDependencies section, remove the one from the devDependencies.
      - For the remaining part, prefer the incoming changes.
    - For code files:
      - Preserve functionality from both versions.
@@ -42,7 +44,7 @@ async function resolveMergeConflict() {
   try {
     // Retrieve the filename from command-line arguments
     const filename = process.argv[2];
-
+  
     // Check if the filename argument is provided
     if (!filename) {
       console.error("Error: No filename provided.");
