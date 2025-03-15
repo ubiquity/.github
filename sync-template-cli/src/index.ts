@@ -1,11 +1,12 @@
 #!/usr/bin/env bun
 
-import Anthropic from "@anthropic-ai/sdk";
+import OpenAI from 'openai';
 import { readFileSync, writeFileSync } from "fs";
 
 const API_KEY = process.env.OPENAI_KEY;
 
-const client = new Anthropic({
+const openai  = new OpenAI({
+  baseURL: 'https://openrouter.ai/api/v1',
   apiKey: API_KEY,
 });
 
@@ -55,35 +56,42 @@ async function resolveMergeConflict() {
     // Read the file content as a buffer
     const content = readFileSync(filename);
 
-    const response = await client.messages.create({
-      model: "claude-3-7-sonnet-20250219",
+    const response = await openai.chat.completions.create({
+      model: "anthropic/claude-3.7-sonnet",
       max_tokens: 8192,
-      system: [
-        {
-          type: "text",
-          text: "You are a seasoned software engineer. Your goal is to solve merge conflicts.\n",
-        },
-        {
-          type: "text",
-          text: SYSTEM_PROMPT,
-          cache_control: { type: "ephemeral" },
-        },
-      ],
       messages: [
         {
+          role: "system",
+          content: [
+            {
+              type: "text",
+              text: "You are a seasoned software engineer. Your goal is to solve merge conflicts.\n",
+            },
+            {
+              type: "text",
+              text: SYSTEM_PROMPT,
+            },
+          ]
+        },
+        {
           role: "user",
-          content: `Here is the input data. File name: ${filename}. Content: ${content}`,
+          content: [
+            {
+              type: "text",
+              text: `Here is the input data. File name: ${filename}. Content: ${content}`
+            }
+          ]
         },
       ],
     });
 
     // Write the resolved content back to the file
-    if (!response.content || response.content.length === 0) {
+    if (!response.choices || response.choices.length === 0) {
       console.error("Error: Received an empty response from the API.");
       process.exit(1);
     }
 
-    const text = (response.content[0] as Anthropic.TextBlock).text;
+    const text = (response.choices[0] as OpenAI.ChatCompletion.Choice).message.content;
     writeFileSync(filename, `${text}\n`);
   } catch (error) {
     console.error("Error resolving merge conflict:", error);

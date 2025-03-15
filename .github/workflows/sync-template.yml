@@ -3,16 +3,15 @@ name: Sync template repository to branch
 on:
   workflow_call:
     inputs:
-      config_file:
-        description: 'Path to a JSON configuration file'
-        required: false
-        default: '.github/sync-template-config.json'
-        type: string
       target_repository:
         description: 'Repository to be synced'
         required: true
         default: ''
         type: string
+    secrets:
+      PAT:
+        required: true
+
   workflow_dispatch:
     inputs:
       config_file:
@@ -53,7 +52,7 @@ jobs:
       - name: Checkout target repository
         uses: actions/checkout@v4
         with:
-          repository: ${{ github.event.inputs.target_repository }}
+          repository: ${{ github.event.inputs.target_repository || inputs.target_repository }}
           fetch-depth: 0
           token: ${{ secrets.PAT }}
           path: 'target-to-synced'
@@ -87,7 +86,7 @@ jobs:
       - name: Sync template repository
         env: 
           WHITELISTED_FILES: "${{ steps.config.outputs.whitelisted_files }} ${{ github.event.inputs.additional_whitelisted_files}}"
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
         run: |
           cd target-to-synced
           branch_name=$(git rev-parse --abbrev-ref HEAD)
@@ -171,6 +170,8 @@ jobs:
           original_remote=$(git remote get-url origin)
           pr_branch=${branch_name}
 
+          git status
+
           # Check if there are any changes
           if git diff --staged --quiet && git diff --quiet; then
             echo "No changes to sync from template."
@@ -187,5 +188,3 @@ jobs:
                       --body "This pull request merges changes from the template repository. There may be conflicts that require manual resolution." \
                       --head "$pr_branch" \
                       --base "development" || true
-
-

@@ -25,7 +25,7 @@
     "open-source"
   ],
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.39.0"
+    "openai": "^4.87.3"
   },
   "devDependencies": {
     "@actions/core": "^1.11.1",

@@ -11,6 +11,7 @@
         ".github/empty-string-checker.ts",
         ".github/pull_request_template.md",
         ".husky/*",
+        "eslint.config.mjs",
         "package.json"
     ]
 }
