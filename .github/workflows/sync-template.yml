@@ -102,6 +102,9 @@ jobs:
           pr_branch="sync-template/${branch_name}"
           base_branch="${{ steps.config.outputs.base_branch }}"
           template_repository="${{ steps.config.outputs.template_repository }}"
+
+          git config --global user.email "ubiquity-os[bot]@users.noreply.github.com"
+          git config --global user.name "ubiquity-os[bot]"
           
           git remote add template https://github.com/${template_repository}
           git fetch template
@@ -177,9 +180,6 @@ jobs:
           original_remote=$(git remote get-url origin)
           pr_branch=${branch_name}
 
-          # git config --global user.email "ubiquity-os[bot]@users.noreply.github.com"
-          # git config --global user.name "ubiquity-os[bot]"
-
           # Check if there are any changes
           if git diff --staged --quiet && git diff --quiet; then
             echo "No changes to sync from template."
@@ -191,7 +191,7 @@ jobs:
 
           # Push changes and create PR
           git push -f "$original_remote" "$pr_branch"
-          # echo "${{ secrets.PAT }}" | gh auth login --with-token
+          echo "${{ secrets.GH_TOKEN }}" | gh auth login --with-token
           gh pr create --title "Sync ts-template repository (manual resolution required)" \
                       --body "This pull request merges changes from the template repository. There may be conflicts that require manual resolution." \
                       --head "$pr_branch" \
