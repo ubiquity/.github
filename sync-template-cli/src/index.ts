@@ -1,13 +1,13 @@
 #!/usr/bin/env bun
 
-import OpenAI from 'openai';
+import OpenAI from "openai";
 import { readFileSync, writeFileSync } from "fs";
 
-const API_KEY = process.env.OPENAI_KEY;
+const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
 
-const openai  = new OpenAI({
-  baseURL: 'https://openrouter.ai/api/v1',
-  apiKey: API_KEY,
+const openai = new OpenAI({
+  baseURL: "https://openrouter.ai/api/v1",
+  apiKey: OPENROUTER_API_KEY,
 });
 
 const SYSTEM_PROMPT = `
@@ -45,7 +45,7 @@ async function resolveMergeConflict() {
   try {
     // Retrieve the filename from command-line arguments
     const filename = process.argv[2];
-  
+
     // Check if the filename argument is provided
     if (!filename) {
       console.error("Error: No filename provided.");
@@ -71,16 +71,16 @@ async function resolveMergeConflict() {
               type: "text",
               text: SYSTEM_PROMPT,
             },
-          ]
+          ],
         },
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: `Here is the input data. File name: ${filename}. Content: ${content}`
-            }
-          ]
+              text: `Here is the input data. File name: ${filename}. Content: ${content}`,
+            },
+          ],
         },
       ],
     });

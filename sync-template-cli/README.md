@@ -1,10 +1,8 @@
-# Ubiquity XP
+# Fix Merge Conflicts Tool
 
-A toolset to calculate GitHub user XP using Supabase and GitHub API data.
+A script to fix merge conflicts using AI.
 
-## xp-cli
-
-### Setup
+## Setup
 
 1. **Install Dependencies**:
 
@@ -19,38 +17,11 @@ A toolset to calculate GitHub user XP using Supabase and GitHub API data.
    cp .env.example .env
    ```
 
-   Edit `.env` with your Supabase URL, Anon Key, and GitHub Token.
+   Edit `.env` with your OpenRouter API Key.
 
-3. **Link the CLI**:
-   ```bash
-   bun link
-   ```
 
 ## Usage
 
-Calculate XP for a GitHub user:
-
 ```bash
-xp-cli calculate --user=zugdev
+bun src/index.ts <file_path>
 ```
-
-### Options
-
-- `--user <username>`: GitHub username (required).
-- `--org <org>`: Filter by organization (optional).
-- `--repo <repo>`: Filter by repository (requires `--org`, optional).
-
-### Examples
-
-- Global XP:
-  ```bash
-  xp-cli calculate --user=zugdev
-  ```
-- Organization XP:
-  ```bash
-  xp-cli calculate --user=zugdev --org=ubiquity
-  ```
-- Repository XP:
-  ```bash
-  xp-cli calculate --user=zugdev --org=ubiquity --repo=work.ubq.fi
-  ```

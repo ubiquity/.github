@@ -19,6 +19,11 @@ on:
         required: true
         default: ''
         type: string
+      config_file:
+        description: 'Path to a JSON configuration file'
+        required: false
+        default: '.github/sync-template-config.json'
+        type: string
       additional_whitelisted_files:
         description: 'Additional files to be synced'
         required: false
@@ -35,35 +40,43 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          token: ${{ secrets.PAT }}
+          
       - name: Set up bun
         uses: oven-sh/setup-bun@v2
+
       - name: Install dependencies
         run: |
           cd sync-template-cli
           bun install
+
+      - name: Get GitHub App token
+        uses: tibdex/github-app-token@v1.7.0
+        id: get_installation_token
+        with:
+          app_id: ${{ secrets.APP_ID }}
+          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+
       - name: Checkout target repository
         uses: actions/checkout@v4
         with:
           repository: ${{ github.event.inputs.target_repository || inputs.target_repository }}
           fetch-depth: 0
-          token: ${{ secrets.PAT }}
           path: 'target-to-synced'
 
       - name: Parse configuration
         id: config
         run: |
-          CONFIG_FILE=".github/sync-template-config.json"
+          CONFIG_FILE="${{ github.event.inputs.config_file || '.github/sync-template-config.json' }}"
           echo "Using configuration file: $CONFIG_FILE"
           
           if [ -f "$CONFIG_FILE" ]; then
             # Read and parse the configuration file
+            TEMPLATE_REPOSITORY=$(jq -r '.template_repository' "$CONFIG_FILE")
             WHITELISTED_FILES=$(jq -r '.whitelisted_files | join(" ")' "$CONFIG_FILE")
             BASE_BRANCH=$(jq -r '.base_branch' "$CONFIG_FILE")
 
             # Set outputs
+            echo "template_repository=$TEMPLATE_REPOSITORY" >> $GITHUB_OUTPUT
             echo "base_branch=$BASE_BRANCH" >> $GITHUB_OUTPUT
             echo "whitelisted_files=$WHITELISTED_FILES" >> $GITHUB_OUTPUT    
             echo "Configuration loaded successfully"
@@ -72,6 +85,7 @@ jobs:
             echo "Using default values"
             
             # Set default values
+            echo "template_repository=ubiquity/ts-template" >> $GITHUB_OUTPUT
             echo "base_branch=development" >> $GITHUB_OUTPUT
             echo "whitelisted_files=.github/* .husky/* .gitattributes .gitignore .nvmrc .prettierrc \
               .yarnrc.yml .cypress.config.ts eslint.config.mjs jest.config.json package.json \
@@ -81,17 +95,15 @@ jobs:
       - name: Sync template repository
         env: 
           WHITELISTED_FILES: "${{ steps.config.outputs.whitelisted_files }} ${{ github.event.inputs.additional_whitelisted_files}}"
-          OPENAI_KEY: ${{ secrets.OPENAI_KEY }}
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
           cd target-to-synced
           branch_name=$(git rev-parse --abbrev-ref HEAD)
           pr_branch="sync-template/${branch_name}"
           base_branch="${{ steps.config.outputs.base_branch }}"
+          template_repository="${{ steps.config.outputs.template_repository }}"
           
-          git config --global user.email "ubiquity-os[bot]@users.noreply.github.com"
-          git config --global user.name "ubiquity-os[bot]"
-
-          git remote add template https://github.com/ubiquity/ts-template.git
+          git remote add template https://github.com/${template_repository}
           git fetch template
 
           git checkout -b "$pr_branch"
@@ -157,7 +169,7 @@ jobs:
 
       - name: Create PR
         env:
-          PAT_TOKEN: ${{ secrets.PAT }}
+          GH_TOKEN: ${{ steps.get_installation_token.outputs.token }}
         run: |
           cd target-to-synced
           
@@ -165,7 +177,8 @@ jobs:
           original_remote=$(git remote get-url origin)
           pr_branch=${branch_name}
 
-          git status
+          # git config --global user.email "ubiquity-os[bot]@users.noreply.github.com"
+          # git config --global user.name "ubiquity-os[bot]"
 
           # Check if there are any changes
           if git diff --staged --quiet && git diff --quiet; then
@@ -178,8 +191,8 @@ jobs:
 
           # Push changes and create PR
           git push -f "$original_remote" "$pr_branch"
-          echo "${{ secrets.PAT }}" | gh auth login --with-token
+          # echo "${{ secrets.PAT }}" | gh auth login --with-token
           gh pr create --title "Sync ts-template repository (manual resolution required)" \
                       --body "This pull request merges changes from the template repository. There may be conflicts that require manual resolution." \
                       --head "$pr_branch" \
-                      --base "development" || true
+                      --base "$branch_name" || true
