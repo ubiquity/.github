@@ -3,6 +3,12 @@ on:
   schedule:
     - cron: '0 0 14 * *'
   workflow_dispatch:
+    inputs:
+      config_file:
+        description: 'Path to a JSON configuration file'
+        required: false
+        default: '.github/sync-template-config.json'
+        type: string
 
 jobs:
   prepare:
@@ -14,11 +20,10 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          token: ${{ secrets.PAT }}
+
       - name: Parse repositories from configuration file
         id: config
         run: |
-          pwd
           CONFIG_FILE="${{ github.event.inputs.config_file || '.github/sync-template-config.json' }}"
           echo "Using configuration file: $CONFIG_FILE"
           
