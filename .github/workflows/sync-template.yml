@@ -9,7 +9,9 @@ on:
         default: ''
         type: string
     secrets:
-      PAT:
+      APP_ID:
+        required: true
+      APP_PRIVATE_KEY:
         required: true
 
   workflow_dispatch:
@@ -154,7 +156,7 @@ jobs:
                     git checkout development -- $conflict_file
                   else
                     echo "Fixing merge conflict: " $conflict_file
-                    bun ../sync-template-cli/src/index.ts $conflict_file
+                    # bun ../sync-template-cli/src/index.ts $conflict_file
                   fi
                 done
             fi
