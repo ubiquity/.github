@@ -32,18 +32,23 @@ jobs:
             echo "$CONFIG_FILE"
             # Read and parse the configuration file
             TEMPLATE_REPO=$(jq -rc '.template_repository' "$CONFIG_FILE")
-            REPOSITORIES=$(jq -rc '.repositories' "$CONFIG_FILE")
+            REPOSITORIES=($(jq -rc '.repositories[]' "$CONFIG_FILE"))
 
-            echo "$REPOSITORIES"
+            echo "${REPOSITORIES[@]}"
             
-            # Check if there is any repositories else load from organizations
-            echo "$REPOSITORIES" | jq -e 'length > 0' > /dev/null
-            if [ $? -eq 1 ]; then
-              REPOSITORIES=$(curl -s "https://api.github.com/users/ubiquity/repos?per_page=100" | jq -rc --arg TEMPLATE_REPO $TEMPLATE_REPO '[.[] | select(.full_name != $TEMPLATE_REPO) | .full_name]')
-            fi
+            LIST_REPOS=$(curl -s "https://api.github.com/users/ubiquity/repos")
+            FILTERED_REPOS=$(echo $LIST_REPOS | jq -rc --arg TEMPLATE_REPO $TEMPLATE_REPO --arg $CUR_REPO ${{ github.repository }} '[.[] | select(.full_name != $TEMPLATE_REPO and .full_name != $CUR_REPO)]')
+            ALL_REPOSITORIES=($(echo $FILTERED_REPOS | jq -rc '.[] | .full_name'))
             
+            ALL_REPOSITORIES+=("${REPOSITORIES[@]}")
+            echo ${{ github.repository }}
+            echo ${ALL_REPOSITORIES[@]}
+
+            LIST_REPOS=$(printf '"%s",' "${ALL_REPOSITORIES[@]}")
+            LIST_REPOS="[${LIST_REPOS%,}]"
+
             # Set outputs
-            echo "repositories=$REPOSITORIES" >> $GITHUB_OUTPUT    
+            echo "repositories=${LIST_REPOS}" >> $GITHUB_OUTPUT    
             echo "Configuration loaded successfully"
           fi
       - run: echo $JSON_STRING

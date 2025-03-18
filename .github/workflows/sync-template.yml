@@ -62,8 +62,8 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: ${{ github.event.inputs.target_repository || inputs.target_repository }}
-          fetch-depth: 0
           path: 'target-to-synced'
+          token: ${{ steps.get_installation_token.outputs.token }}
 
       - name: Parse configuration
         id: config
@@ -94,6 +94,44 @@ jobs:
               tsconfig.json" >> $GITHUB_OUTPUT
           fi
 
+      - name: Fetch GitHub App Slug
+        env:
+          GH_TOKEN: ${{ steps.get_installation_token.outputs.token }}
+        run: |
+          now=$(date +%s)
+          iat=$((${now} - 60)) # Issues 60 seconds in the past
+          exp=$((${now} + 600)) # Expires 10 minutes in the future
+
+          b64enc() { openssl base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n'; }
+          header_json='{
+              "typ":"JWT",
+              "alg":"RS256"
+          }'
+          # Header encode
+          header=$( echo -n "${header_json}" | b64enc )
+
+          payload_json="{
+              \"iat\":${iat},
+              \"exp\":${exp},
+              \"iss\":\"${{ secrets.APP_ID }}\"
+          }"
+          # Payload encode
+          payload=$( echo -n "${payload_json}" | b64enc )
+
+          # Signature
+          header_payload="${header}"."${payload}"
+          signature=$(
+              openssl dgst -sha256 -sign <(echo -n "${{ secrets.APP_PRIVATE_KEY }}") \
+              <(echo -n "${header_payload}") | b64enc
+          )
+
+          # Create JWT
+          JWT="${header_payload}"."${signature}"
+          
+          app_info=$(curl -s -H "Authorization: Bearer $JWT" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/app")
+          app_slug=$(echo "$app_info" | jq -r '.slug')
+          echo "APP_SLUG=$app_slug" >> $GITHUB_ENV
+
       - name: Sync template repository
         env: 
           WHITELISTED_FILES: "${{ steps.config.outputs.whitelisted_files }} ${{ github.event.inputs.additional_whitelisted_files}}"
@@ -105,8 +143,8 @@ jobs:
           base_branch="${{ steps.config.outputs.base_branch }}"
           template_repository="${{ steps.config.outputs.template_repository }}"
 
-          git config --global user.email "ubiquity-os[bot]@users.noreply.github.com"
-          git config --global user.name "ubiquity-os[bot]"
+          git config --global user.email "${APP_SLUG}[bot]@users.noreply.github.com"
+          git config --global user.name "${APP_SLUG}[bot]"
           
           git remote add template https://github.com/${template_repository}
           git fetch template
@@ -171,7 +209,7 @@ jobs:
           rm -f yarn.lock
           bun install || true
           git add bun.lock || true
-
+    
       - name: Create PR
         env:
           GH_TOKEN: ${{ steps.get_installation_token.outputs.token }}
@@ -181,7 +219,7 @@ jobs:
           branch_name=$(git rev-parse --abbrev-ref HEAD)
           original_remote=$(git remote get-url origin)
           pr_branch=${branch_name}
-
+          
           # Check if there are any changes
           if git diff --staged --quiet && git diff --quiet; then
             echo "No changes to sync from template."
@@ -192,9 +230,8 @@ jobs:
           git commit -am "chore: sync template (with potential conflicts)" || true
 
           # Push changes and create PR
-          git push -f "$original_remote" "$pr_branch"
-          echo "${{ secrets.GH_TOKEN }}" | gh auth login --with-token
-          gh pr create --title "Sync ts-template repository (manual resolution required)" \
-                      --body "This pull request merges changes from the template repository. There may be conflicts that require manual resolution." \
-                      --head "$pr_branch" \
-                      --base "$branch_name" || true
+          # git push -f $original_remote "$pr_branch"
+          # gh pr create --title "Sync ts-template repository (manual resolution required)" \
+          #             --body "This pull request merges changes from the template repository. There may be conflicts that require manual resolution." \
+          #             --head "$pr_branch" \
+          #             --base development || true
