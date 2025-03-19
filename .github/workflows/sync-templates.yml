@@ -41,8 +41,6 @@ jobs:
             ALL_REPOSITORIES=($(echo $FILTERED_REPOS | jq -rc '.[] | .full_name'))
             
             ALL_REPOSITORIES+=("${REPOSITORIES[@]}")
-            echo ${{ github.repository }}
-            echo ${ALL_REPOSITORIES[@]}
 
             LIST_REPOS=$(printf '"%s",' "${ALL_REPOSITORIES[@]}")
             LIST_REPOS="[${LIST_REPOS%,}]"
@@ -65,4 +63,5 @@ jobs:
     uses: ./.github/workflows/sync-template.yml
     with:
       target_repository: ${{ matrix.repository }}
+      config_file: "${{ github.event.inputs.config_file || '.github/sync-template-config.json' }}"
     secrets: inherit

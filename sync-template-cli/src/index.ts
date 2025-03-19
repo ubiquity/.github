@@ -42,63 +42,58 @@ You analyze and resolve Git merge conflicts automatically. When presented with c
 `;
 
 async function resolveMergeConflict() {
-  try {
-    // Retrieve the filename from command-line arguments
-    const filename = process.argv[2];
+  // Retrieve the filename from command-line arguments
+  const filename = process.argv[2];
 
-    // Check if the filename argument is provided
-    if (!filename) {
-      console.error("Error: No filename provided.");
-      console.error("Usage: bun index.ts <filename>");
-      process.exit(1);
-    }
-
-    // Read the file content as a buffer
-    const content = readFileSync(filename);
-
-    const response = await openai.chat.completions.create({
-      model: "anthropic/claude-3.7-sonnet",
-      max_tokens: 8192,
-      messages: [
-        {
-          role: "system",
-          content: [
-            {
-              type: "text",
-              text: "You are a seasoned software engineer. Your goal is to solve merge conflicts.\n",
-            },
-            {
-              type: "text",
-              text: SYSTEM_PROMPT,
-            },
-          ],
-        },
-        {
-          role: "user",
-          content: [
-            {
-              type: "text",
-              text: `Here is the input data. File name: ${filename}. Content: ${content}`,
-            },
-          ],
-        },
-      ],
-    });
-
-    // Write the resolved content back to the file
-    if (!response.choices || response.choices.length === 0) {
-      console.error("Error: Received an empty response from the API.");
-      process.exit(1);
-    }
-
-    const text = (response.choices[0] as OpenAI.ChatCompletion.Choice).message.content;
-    writeFileSync(filename, `${text}\n`);
-  } catch (error) {
-    console.error("Error resolving merge conflict:", error);
+  // Check if the filename argument is provided
+  if (!filename) {
+    console.error("Error: No filename provided.");
+    console.error("Usage: bun index.ts <filename>");
+    process.exit(1);
   }
+
+  // Read the file content as a buffer
+  const content = readFileSync(filename);
+
+  const response = await openai.chat.completions.create({
+    model: "anthropic/claude-3.7-sonnet",
+    max_tokens: 8192,
+    messages: [
+      {
+        role: "system",
+        content: [
+          {
+            type: "text",
+            text: "You are a seasoned software engineer. Your goal is to solve merge conflicts.\n",
+          },
+          {
+            type: "text",
+            text: SYSTEM_PROMPT,
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: `Here is the input data. File name: ${filename}. Content: ${content}`,
+          },
+        ],
+      },
+    ],
+  });
+
+  // Write the resolved content back to the file
+  if (!response.choices || response.choices.length === 0) {
+    throw new Error("Error: Received an empty response from the API.");
+  }
+
+  const text = response.choices[0].message.content;
+  writeFileSync(filename, `${text}\n`);
 }
 
 resolveMergeConflict().catch((error) => {
-  console.error("Unhandled error in resolveMergeConflict:", error);
+  console.error("Error in resolveMergeConflict:", error);
   process.exit(1);
 });

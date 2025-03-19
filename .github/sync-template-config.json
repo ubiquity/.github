@@ -5,8 +5,6 @@
         "ubiquity"
     ],
     "repositories": [
-        "ariesgun/work.ubq.fi",
-        "ariesgun/safe.ubq.fi"
     ],
     "whitelisted_files": [
         "eslint.config.mjs",

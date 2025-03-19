@@ -8,6 +8,11 @@ on:
         required: true
         default: ''
         type: string
+      config_file:
+        description: 'Path to a JSON configuration file'
+        required: false
+        default: '.github/sync-template-config.json'
+        type: string
     secrets:
       APP_ID:
         required: true
@@ -68,7 +73,7 @@ jobs:
       - name: Parse configuration
         id: config
         run: |
-          CONFIG_FILE="${{ github.event.inputs.config_file || '.github/sync-template-config.json' }}"
+          CONFIG_FILE="${{ github.event.inputs.config_file || inputs.config_file }}"
           echo "Using configuration file: $CONFIG_FILE"
           
           if [ -f "$CONFIG_FILE" ]; then
@@ -191,10 +196,10 @@ jobs:
                 for conflict_file in $conflict_files; do
                   if ! matches_whitelisted "$conflict_file"; then
                     echo "Checking out HEAD version: " $conflict_file
-                    git checkout development -- $conflict_file
+                    git checkout $branch_name -- $conflict_file
                   else
                     echo "Fixing merge conflict: " $conflict_file
-                    # bun ../sync-template-cli/src/index.ts $conflict_file
+                    bun ../sync-template-cli/src/index.ts $conflict_file
                   fi
                 done
             fi
@@ -206,7 +211,6 @@ jobs:
         run: |
           cd target-to-synced
 
-          rm -f yarn.lock
           bun install || true
           git add bun.lock || true
     
@@ -230,8 +234,8 @@ jobs:
           git commit -am "chore: sync template (with potential conflicts)" || true
 
           # Push changes and create PR
-          # git push -f $original_remote "$pr_branch"
-          # gh pr create --title "Sync ts-template repository (manual resolution required)" \
-          #             --body "This pull request merges changes from the template repository. There may be conflicts that require manual resolution." \
-          #             --head "$pr_branch" \
-          #             --base development || true
+          git push -f $original_remote "$pr_branch"
+          gh pr create --title "Sync ts-template repository (manual resolution required)" \
+                      --body "This pull request merges changes from the template repository. There may be conflicts that require manual resolution." \
+                      --head "$pr_branch" \
+                      --base development || true
