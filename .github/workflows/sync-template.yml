@@ -57,18 +57,19 @@ jobs:
           bun install
 
       - name: Get GitHub App token
-        uses: tibdex/github-app-token@v1.7.0
-        id: get_installation_token
+        uses: actions/create-github-app-token@v1
+        id: get_app_token
         with:
-          app_id: ${{ secrets.APP_ID }}
-          private_key: ${{ secrets.APP_PRIVATE_KEY }}
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
 
       - name: Checkout target repository
         uses: actions/checkout@v4
         with:
           repository: ${{ github.event.inputs.target_repository || inputs.target_repository }}
           path: 'target-to-synced'
-          token: ${{ steps.get_installation_token.outputs.token }}
+          token: ${{ steps.get_app_token.outputs.token }}
 
       - name: Parse configuration
         id: config
@@ -99,43 +100,12 @@ jobs:
               tsconfig.json" >> $GITHUB_OUTPUT
           fi
 
-      - name: Fetch GitHub App Slug
+      - name: Setup Git config
         env:
-          GH_TOKEN: ${{ steps.get_installation_token.outputs.token }}
+          GH_TOKEN: ${{ steps.get_app_token.outputs.token }}
         run: |
-          now=$(date +%s)
-          iat=$((${now} - 60)) # Issues 60 seconds in the past
-          exp=$((${now} + 600)) # Expires 10 minutes in the future
-
-          b64enc() { openssl base64 | tr -d '=' | tr '/+' '_-' | tr -d '\n'; }
-          header_json='{
-              "typ":"JWT",
-              "alg":"RS256"
-          }'
-          # Header encode
-          header=$( echo -n "${header_json}" | b64enc )
-
-          payload_json="{
-              \"iat\":${iat},
-              \"exp\":${exp},
-              \"iss\":\"${{ secrets.APP_ID }}\"
-          }"
-          # Payload encode
-          payload=$( echo -n "${payload_json}" | b64enc )
-
-          # Signature
-          header_payload="${header}"."${payload}"
-          signature=$(
-              openssl dgst -sha256 -sign <(echo -n "${{ secrets.APP_PRIVATE_KEY }}") \
-              <(echo -n "${header_payload}") | b64enc
-          )
-
-          # Create JWT
-          JWT="${header_payload}"."${signature}"
-          
-          app_info=$(curl -s -H "Authorization: Bearer $JWT" -H "Accept: application/vnd.github.v3+json" "https://api.github.com/app")
-          app_slug=$(echo "$app_info" | jq -r '.slug')
-          echo "APP_SLUG=$app_slug" >> $GITHUB_ENV
+          git config --global user.name '${{ steps.get_app_token.outputs.app-slug }}[bot]'
+          git config --global user.email '${{ steps.get_app_token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
       - name: Sync template repository
         env: 
@@ -147,9 +117,6 @@ jobs:
           pr_branch="sync-template/${branch_name}"
           base_branch="${{ steps.config.outputs.base_branch }}"
           template_repository="${{ steps.config.outputs.template_repository }}"
-
-          git config --global user.email "${APP_SLUG}[bot]@users.noreply.github.com"
-          git config --global user.name "${APP_SLUG}[bot]"
           
           git remote add template https://github.com/${template_repository}
           git fetch template
@@ -216,7 +183,7 @@ jobs:
     
       - name: Create PR
         env:
-          GH_TOKEN: ${{ steps.get_installation_token.outputs.token }}
+          GH_TOKEN: ${{ steps.get_app_token.outputs.token }}
         run: |
           cd target-to-synced
           
