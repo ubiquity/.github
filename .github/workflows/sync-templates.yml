@@ -36,11 +36,28 @@ jobs:
             
             ORGANIZATIONS=($(jq -rc '.organizations[]' "$CONFIG_FILE"))
             for organization in "${ORGANIZATIONS[@]}"; do
-              LIST_REPOS=$(curl -s "https://api.github.com/users/${organization}/repos?per_page=100")
-              FILTERED_REPOS=$(echo $LIST_REPOS | jq -rc --arg TEMPLATE_REPO $TEMPLATE_REPO --arg $CUR_REPO ${{ github.repository }} '[.[] | select(.full_name != $TEMPLATE_REPO and .full_name != $CUR_REPO)]')
-              REPOSITORIES=($(echo $FILTERED_REPOS | jq -rc '.[] | .full_name'))
-              
-              ALL_REPOSITORIES+=("${REPOSITORIES[@]}")
+              PAGE=1
+              PER_PAGE=100
+              while true; do
+                LIST_REPOS=$(curl -s "https://api.github.com/users/${organization}/repos?per_page=${PER_PAGE}&page=${PAGE}")
+                
+                # Break the loop if the response is not a list
+                if [[ "$(echo "$LIST_REPOS" | jq -r 'type')" == "object" ]]; then
+                  echo "Error: $LIST_REPOS"
+                  break
+                fi
+
+                # Break the loop if the response is empty
+                if $(echo "$LIST_REPOS" | jq -e 'length == 0' > /dev/null); then
+                  break
+                fi
+
+                FILTERED_REPOS=$(echo $LIST_REPOS | jq -rc --arg TEMPLATE_REPO $TEMPLATE_REPO --arg $CUR_REPO ${{ github.repository }} '[.[] | select(.full_name != $TEMPLATE_REPO and .full_name != $CUR_REPO)]')
+                REPOSITORIES=($(echo $FILTERED_REPOS | jq -rc '.[] | .full_name'))
+                ALL_REPOSITORIES+=("${REPOSITORIES[@]}")
+
+                ((PAGE++))
+              done
             done
             
             LIST_REPOS=$(printf '"%s",' "${ALL_REPOSITORIES[@]}")

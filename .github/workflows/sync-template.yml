@@ -104,8 +104,10 @@ jobs:
         env:
           GH_TOKEN: ${{ steps.get_app_token.outputs.token }}
         run: |
+          user_id=$(gh api "/users/${{ steps.get_app_token.outputs.app-slug }}[bot]" --jq .id)
+
           git config --global user.name '${{ steps.get_app_token.outputs.app-slug }}[bot]'
-          git config --global user.email '${{ steps.get_app_token.outputs.app-slug }}[bot]@users.noreply.github.com'
+          git config --global user.email '${user_id}+${{ steps.get_app_token.outputs.app-slug }}[bot]@users.noreply.github.com'
 
       - name: Sync template repository
         env: 
