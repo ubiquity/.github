@@ -114,8 +114,6 @@ jobs:
           WHITELISTED_FILES: "${{ steps.config.outputs.whitelisted_files }} ${{ github.event.inputs.additional_whitelisted_files}}"
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
-          pwd
-          ls -al
           base_path=$(pwd)
           cli_path="${base_path}/sync-template-cli"
       
