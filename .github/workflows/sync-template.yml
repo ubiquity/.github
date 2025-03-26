@@ -114,7 +114,11 @@ jobs:
           WHITELISTED_FILES: "${{ steps.config.outputs.whitelisted_files }} ${{ github.event.inputs.additional_whitelisted_files}}"
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
         run: |
+          base_path=$(pwd)
+          cli_path="${base_path}/.github/sync-template-cli"
+      
           cd target-to-synced
+          cur_path=$(pwd)
           branch_name=$(git rev-parse --abbrev-ref HEAD)
           pr_branch="sync-template/${branch_name}"
           base_branch="${{ steps.config.outputs.base_branch }}"
@@ -168,7 +172,7 @@ jobs:
                     git checkout $branch_name -- $conflict_file
                   else
                     echo "Fixing merge conflict: " $conflict_file
-                    bun ../sync-template-cli/src/index.ts $conflict_file
+                    bun run --cwd ${cli_path} src/index.ts ${cur_path}/${conflict_file}
                   fi
                 done
             fi

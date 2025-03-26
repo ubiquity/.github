@@ -79,6 +79,10 @@ jobs:
         repository: ${{ fromJson(needs.prepare.outputs.repositories) }}
       fail-fast: false
       max-parallel: 15
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
     uses: ./.github/workflows/sync-template.yml
     with:
       target_repository: ${{ matrix.repository }}
