@@ -1,13 +1,14 @@
 {
-    "template_repository": "ubiquity/ts-template",
+    "template_repository": "ubiquity-os/plugin-template",
     "base_branch": "development",
     "organizations": [
-        "ubiquity"
+       
     ],
     "repositories": [
+        "ubiquity-whilefoo/command-ask"
     ],
     "whitelisted_files": [
-        "eslint.config.mjs",
+        ".github/**",
         "package.json"
     ]
 }
