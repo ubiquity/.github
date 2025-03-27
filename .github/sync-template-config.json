@@ -8,6 +8,14 @@
     ],
     "whitelisted_files": [
         ".github/**",
-        "package.json"
+        ".husky/**",
+        "package.json",
+        ".cspell.json",
+        ".gitattributes",
+        ".prettierrc",
+        "eslint.config.mjs",
+        "jest.config.ts",
+        "tsconfig.json",
+        "wrangler.toml"
     ]
 }
