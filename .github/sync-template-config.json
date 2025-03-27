@@ -12,6 +12,7 @@
         "package.json",
         ".cspell.json",
         ".gitattributes",
+        ".gitignore",
         ".prettierrc",
         "eslint.config.mjs",
         "jest.config.ts",
