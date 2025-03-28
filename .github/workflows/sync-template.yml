@@ -100,14 +100,20 @@ jobs:
               tsconfig.json" >> $GITHUB_OUTPUT
           fi
 
+          TARGET_REPOSITORY=$(basename ${{ github.event.inputs.target_repository || inputs.target_repository }})
+          echo "target_repository=$TARGET_REPOSITORY" >> $GITHUB_OUTPUT
+
+          BRANCH_REF=sync-template/${BASE_BRANCH}
+          echo "branch_ref=$BRANCH_REF" >> $GITHUB_OUTPUT
+
       - name: Setup Git config
         env:
           GH_TOKEN: ${{ steps.get_app_token.outputs.token }}
         run: |
           user_id=$(gh api "/users/${{ steps.get_app_token.outputs.app-slug }}[bot]" --jq .id)
 
-          git config --global user.name '${{ steps.get_app_token.outputs.app-slug }}[bot]'
-          git config --global user.email '${user_id}+${{ steps.get_app_token.outputs.app-slug }}[bot]@users.noreply.github.com'
+          git config --global user.name "${{ steps.get_app_token.outputs.app-slug }}[bot]"
+          git config --global user.email "${user_id}+${{ steps.get_app_token.outputs.app-slug }}[bot]@users.noreply.github.com"
 
       - name: Sync template repository
         env: 
@@ -186,28 +192,27 @@ jobs:
 
           bun install || true
           git add bun.lock || true
+
+      - name: Create verified commit
+        uses: dsanders11/github-app-commit-action@v1.5.0
+        id: commit
+        with:
+          message: "chore: sync template(with potential conflicts)"
+          force: true
+          token: ${{ steps.get_app_token.outputs.token }}
+          ref: ${{ steps.config.outputs.branch_ref }}
+          repository: ${{ steps.config.outputs.target_repository }}
+          working-directory: target-to-synced
     
       - name: Create PR
         env:
           GH_TOKEN: ${{ steps.get_app_token.outputs.token }}
         run: |
           cd target-to-synced
-          
-          branch_name=$(git rev-parse --abbrev-ref HEAD)
-          original_remote=$(git remote get-url origin)
-          pr_branch=${branch_name}
-          
-          # Check if there are any changes
-          if git diff --staged --quiet && git diff --quiet; then
-            echo "No changes to sync from template."
-            exit 0
-          fi
 
-          # Commit changes, even if there are conflicts
-          git commit -am "chore: sync template (with potential conflicts)" || true
-
-          # Push changes and create PR
-          git push -f $original_remote "$pr_branch"
+          pr_branch=$(git rev-parse --abbrev-ref HEAD)
+          
+          # Create PR
           gh pr create --title "Sync ts-template repository (manual resolution required)" \
                       --body "This pull request merges changes from the template repository. There may be conflicts that require manual resolution." \
                       --head "$pr_branch" \
