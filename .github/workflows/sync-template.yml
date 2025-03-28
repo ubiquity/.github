@@ -186,6 +186,9 @@ jobs:
             echo "Merge completed successfully with no conflicts."
           fi
 
+          # Stage changes
+          git add .
+
       - name: Create bun.lock file
         run: |
           cd target-to-synced
