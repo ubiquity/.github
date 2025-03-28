@@ -214,10 +214,10 @@ jobs:
           cd target-to-synced
 
           pr_branch=$(git rev-parse --abbrev-ref HEAD)
-          target_repository=$(basename ${{ steps.config.outputs.target_repository }})
+          template_repository=$(basename ${{ steps.config.outputs.template_repository }})
           
           # Create PR
-          gh pr create --title "Sync $target_repository repository (manual resolution required)" \
+          gh pr create --title "Sync $template_repository repository (manual resolution required)" \
                       --body "This pull request merges changes from the template repository. There may be conflicts that require manual resolution." \
                       --head "$pr_branch" \
                       --base development || true
