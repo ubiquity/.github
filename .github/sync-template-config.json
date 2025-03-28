@@ -1,0 +1,13 @@
+{
+    "template_repository": "ubiquity-os/plugin-template",
+    "base_branch": "development",
+    "organizations": [
+    ],
+    "repositories": [
+        "ubiquity-whilefoo/command-ask"
+    ],
+    "whitelisted_files": [
+        ".github/**",
+        "package.json"
+    ]
+}

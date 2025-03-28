@@ -1,0 +1,90 @@
+name: Sync template repositories
+on:
+  schedule:
+    - cron: '0 0 14 * *'
+  workflow_dispatch:
+    inputs:
+      config_file:
+        description: 'Path to a JSON configuration file'
+        required: false
+        default: '.github/sync-template-config.json'
+        type: string
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      repositories: ${{ steps.config.outputs.repositories }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Parse repositories from configuration file
+        id: config
+        run: |
+          CONFIG_FILE="${{ github.event.inputs.config_file || '.github/sync-template-config.json' }}"
+          echo "Using configuration file: $CONFIG_FILE"
+          
+          if [ -f "$CONFIG_FILE" ]; then
+          
+            echo "$CONFIG_FILE"
+            # Read and parse the configuration file
+            TEMPLATE_REPO=$(jq -rc '.template_repository' "$CONFIG_FILE")
+            ALL_REPOSITORIES=($(jq -rc '.repositories[]' "$CONFIG_FILE"))
+            
+            ORGANIZATIONS=($(jq -rc '.organizations[]' "$CONFIG_FILE"))
+            for organization in "${ORGANIZATIONS[@]}"; do
+              PAGE=1
+              PER_PAGE=100
+              while true; do
+                LIST_REPOS=$(curl -s "https://api.github.com/users/${organization}/repos?per_page=${PER_PAGE}&page=${PAGE}")
+                
+                # Break the loop if the response is not a list
+                if [[ "$(echo "$LIST_REPOS" | jq -r 'type')" == "object" ]]; then
+                  echo "Error: $LIST_REPOS"
+                  break
+                fi
+
+                # Break the loop if the response is empty
+                if $(echo "$LIST_REPOS" | jq -e 'length == 0' > /dev/null); then
+                  break
+                fi
+
+                FILTERED_REPOS=$(echo $LIST_REPOS | jq -rc --arg TEMPLATE_REPO $TEMPLATE_REPO --arg $CUR_REPO ${{ github.repository }} '[.[] | select(.full_name != $TEMPLATE_REPO and .full_name != $CUR_REPO)]')
+                REPOSITORIES=($(echo $FILTERED_REPOS | jq -rc '.[] | .full_name'))
+                ALL_REPOSITORIES+=("${REPOSITORIES[@]}")
+
+                ((PAGE++))
+              done
+            done
+            
+            LIST_REPOS=$(printf '"%s",' "${ALL_REPOSITORIES[@]}")
+            LIST_REPOS="[${LIST_REPOS%,}]"
+
+            # Set outputs
+            echo "repositories=${LIST_REPOS}" >> $GITHUB_OUTPUT    
+            echo "Configuration loaded successfully"
+          fi
+      - name: List all repositories
+        run: echo $JSON_STRING
+        env:
+          JSON_STRING: ${{ steps.config.outputs.repositories }}
+
+  run-matrix:
+    needs: prepare
+    strategy:
+      matrix: 
+        repository: ${{ fromJson(needs.prepare.outputs.repositories) }}
+      fail-fast: false
+      max-parallel: 15
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/sync-template.yml
+    with:
+      target_repository: ${{ matrix.repository }}
+      config_file: "${{ github.event.inputs.config_file || '.github/sync-template-config.json' }}"
+    secrets: inherit
