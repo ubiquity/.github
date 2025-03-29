@@ -57,7 +57,6 @@ async function resolveMergeConflict() {
 
   const response = await openai.chat.completions.create({
     model: "anthropic/claude-3.7-sonnet",
-    max_tokens: 8192,
     messages: [
       {
         role: "system",
