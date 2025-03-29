@@ -119,17 +119,14 @@ jobs:
           cd target-to-synced
           cur_path=$(pwd)
           branch_name=$(git rev-parse --abbrev-ref HEAD)
-          target_branch_ref=${{ steps.config.outputs.target_branch_ref }}
-          base_branch="${{ steps.config.outputs.base_branch }}"
-          template_repository="${{ steps.config.outputs.template_repository }}"
           
-          git remote add template https://github.com/${template_repository}
+          git remote add template https://github.com/${{ steps.config.outputs.template_repository }}
           git fetch template
 
-          git checkout -b "$target_branch_ref"
+          git checkout -b ${{ steps.config.outputs.target_branch_ref }}
 
           # Execute git merge
-          merge_output=$(git merge --squash template/${base_branch} --allow-unrelated-histories || true)
+          merge_output=$(git merge --squash template/${{ steps.config.outputs.base_branch }} --allow-unrelated-histories || true)
 
           # Enable extended globbing and recursive glob matching
           shopt -s extglob globstar
