@@ -118,7 +118,7 @@ jobs:
       
           cd target-to-synced
           cur_path=$(pwd)
-          branch_name=$(git rev-parse --abbrev-ref HEAD)
+          original_branch=$(git rev-parse --abbrev-ref HEAD)
           
           git remote add template https://github.com/${{ steps.config.outputs.template_repository }}
           git fetch template
@@ -165,7 +165,7 @@ jobs:
                 for conflict_file in $conflict_files; do
                   if ! matches_whitelisted "$conflict_file"; then
                     echo "Checking out HEAD version: " $conflict_file
-                    git checkout $branch_name -- $conflict_file
+                    git checkout $original_branch -- $conflict_file
                   else
                     echo "Fixing merge conflict: " $conflict_file
                     bun run --cwd ${cli_path} src/index.ts ${cur_path}/${conflict_file}
