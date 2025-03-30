@@ -81,19 +81,22 @@ jobs:
             # Read and parse the configuration file
             TEMPLATE_REPOSITORY=$(jq -r '.template_repository' "$CONFIG_FILE")
             WHITELISTED_FILES=$(jq -r '.whitelisted_files | join(" ")' "$CONFIG_FILE")
-            BASE_BRANCH=$(jq -r '.base_branch' "$CONFIG_FILE")
+            TARGET_BRANCH=$(jq -r '.target_branch' "$CONFIG_FILE")
+            TEMPLATE_BRANCH=$(jq -r '.template_branch' "$CONFIG_FILE")
 
             # Set outputs
             echo "template_repository=$TEMPLATE_REPOSITORY" >> $GITHUB_OUTPUT
-            echo "base_branch=$BASE_BRANCH" >> $GITHUB_OUTPUT
+            echo "template_branch=$TEMPLATE_BRANCH" >> $GITHUB_OUTPUT
+            echo "target_branch=$TARGET_BRANCH" >> $GITHUB_OUTPUT
             echo "whitelisted_files=$WHITELISTED_FILES" >> $GITHUB_OUTPUT    
-            echo "Configuration loaded successfully"
             
             TARGET_REPOSITORY=$(basename ${{ github.event.inputs.target_repository || inputs.target_repository }})
             echo "target_repository=$TARGET_REPOSITORY" >> $GITHUB_OUTPUT
 
-            HEAD_BRANCH=sync-template/${BASE_BRANCH}
+            HEAD_BRANCH=sync-template/${TARGET_BRANCH}
             echo "head_branch=$HEAD_BRANCH" >> $GITHUB_OUTPUT
+
+            echo "Configuration loaded successfully"
           else
             echo "Error: Configuration file not found at $CONFIG_FILE"
             exit 1
@@ -118,7 +121,8 @@ jobs:
       
           cd target-to-synced
           cur_path=$(pwd)
-          original_branch=$(git rev-parse --abbrev-ref HEAD)
+          target_branch=${{ steps.config.outputs.target_branch }}
+          git checkout ${target_branch}
           
           git remote add template https://github.com/${{ steps.config.outputs.template_repository }}
           git fetch template
@@ -126,7 +130,7 @@ jobs:
           git checkout -b ${{ steps.config.outputs.head_branch }}
 
           # Execute git merge
-          merge_output=$(git merge --squash template/${{ steps.config.outputs.base_branch }} --allow-unrelated-histories || true)
+          merge_output=$(git merge --squash template/${{ steps.config.outputs.template_branch }} --allow-unrelated-histories || true)
 
           # Enable extended globbing and recursive glob matching
           shopt -s extglob globstar
@@ -165,7 +169,7 @@ jobs:
                 for conflict_file in $conflict_files; do
                   if ! matches_whitelisted "$conflict_file"; then
                     echo "Checking out HEAD version: " $conflict_file
-                    git checkout $original_branch -- $conflict_file
+                    git checkout $target_branch -- $conflict_file
                   else
                     echo "Fixing merge conflict: " $conflict_file
                     bun run --cwd ${cli_path} src/index.ts ${cur_path}/${conflict_file}
@@ -208,4 +212,4 @@ jobs:
           gh pr create --title "Sync $template_repository repository (manual resolution required)" \
                       --body "This pull request merges changes from the template repository. There may be conflicts that require manual resolution." \
                       --head ${{ steps.config.outputs.head_branch }} \
-                      --base ${{ steps.config.outputs.base_branch }} || true
+                      --base ${{ steps.config.outputs.target_branch }} || true
