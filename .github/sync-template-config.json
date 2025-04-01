@@ -1,7 +1,7 @@
 {
     "template_repository": "ubiquity-os/plugin-template",
     "template_branch": "development",
-    "target_branch": "development",
+    "target_branch": "main",
     "organizations": [
     ],
     "repositories": [
