@@ -3,10 +3,9 @@
     "template_branch": "development",
     "target_branch": "development",
     "organizations": [
-        "ubiquity-whilefoo"
     ],
     "repositories": [
-        
+        "ubiquity-whilefoo/command-ask"
     ],
     "whitelisted_files": [
         ".github/**",
