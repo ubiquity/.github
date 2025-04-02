@@ -122,6 +122,8 @@ jobs:
           cd target-to-synced
           cur_path=$(pwd)
           target_branch=${{ steps.config.outputs.target_branch }}
+
+          git fetch origin
           git checkout ${target_branch}
           
           git remote add template https://github.com/${{ steps.config.outputs.template_repository }}
