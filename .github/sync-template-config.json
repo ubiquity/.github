@@ -1,14 +1,25 @@
 {
-    "template_repository": "ubiquity-os/plugin-template",
+    "template_repository": "ubiquity/ts-template",
     "template_branch": "development",
     "target_branch": "development",
     "organizations": [
+        "ubiquity"
     ],
     "repositories": [
-        "ubiquity-whilefoo/command-ask"
     ],
     "whitelisted_files": [
         ".github/**",
-        "package.json"
+        ".husky/**",
+        ".cspell.json",
+        ".eslintrc",
+        ".gitattributes",
+        ".gitignore",
+        ".nvmrc",
+        ".prettierrc",
+        "cypress.config.ts",
+        "eslint.config.mjs",
+        "jest.config.json",
+        "package.json",
+        "tsconfig.json"
     ]
 }
