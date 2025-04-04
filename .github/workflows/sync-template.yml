@@ -185,16 +185,8 @@ jobs:
           # Stage changes
           git add .
 
-      - name: Create bun.lock file
-        run: |
-          cd target-to-synced
-
-          bun install || true
-          git add bun.lock || true
-
       - name: Create verified commit
         uses: dsanders11/github-app-commit-action@v1.5.0
-        id: commit
         with:
           message: "chore: sync template(with potential conflicts)"
           force: true
@@ -202,7 +194,55 @@ jobs:
           ref: ${{ steps.config.outputs.head_branch }}
           repository: ${{ steps.config.outputs.target_repository }}
           working-directory: target-to-synced
-    
+          
+      - name: Run knip and prettier, update bun.lock file
+        run: |
+          cd target-to-synced
+
+          git reset --hard
+          git pull origin ${{ steps.config.outputs.head_branch }}
+
+          bun knip --fix || true
+          bun prettier --write *.ts || true
+
+          git add .
+          git status
+
+      - name: Create verified commit
+        uses: dsanders11/github-app-commit-action@v1.5.0
+        with:
+          message: "chore: execute knip fix and prettier"
+          force: true
+          token: ${{ steps.get_app_token.outputs.token }}
+          ref: ${{ steps.config.outputs.head_branch }}
+          repository: ${{ steps.config.outputs.target_repository }}
+          working-directory: target-to-synced
+          fail-on-no-changes: false
+
+      - name: Update bun.lock file
+        run: |
+          cd target-to-synced
+
+          git reset --hard
+          git pull origin ${{ steps.config.outputs.head_branch }}
+
+          bun install || true
+          git add bun.lock || true
+
+          git add .
+          git status
+
+      - name: Create verified commit
+        uses: dsanders11/github-app-commit-action@v1.5.0
+        with:
+          message: "chore: updated bun.lock file"
+          force: true
+          token: ${{ steps.get_app_token.outputs.token }}
+          ref: ${{ steps.config.outputs.head_branch }}
+          repository: ${{ steps.config.outputs.target_repository }}
+          working-directory: target-to-synced
+          fail-on-no-changes: false
+
       - name: Create PR
         env:
           GH_TOKEN: ${{ steps.get_app_token.outputs.token }}

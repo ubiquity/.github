@@ -1,9 +1,8 @@
-#!/usr/bin/env bun
-
 import OpenAI from "openai";
 import { readFileSync, writeFileSync } from "fs";
 
 const OPENROUTER_API_KEY = process.env.OPENROUTER_API_KEY;
+const AI_MODEL = process.env.AI_MODEL || "anthropic/claude-3.7-sonnet";
 
 const openai = new OpenAI({
   baseURL: "https://openrouter.ai/api/v1",
@@ -11,7 +10,7 @@ const openai = new OpenAI({
 });
 
 const SYSTEM_PROMPT = `
-You analyze and resolve Git merge conflicts automatically. When presented with code containing merge conflict markers (<<<<<<<, =======, >>>>>>>), I will:
+I analyze and resolve Git merge conflicts automatically. When presented with code containing merge conflict markers (<<<<<<<, =======, >>>>>>>), I will:
 
 1. Analyze conflicts:
    - Consider the HEAD version (current branch changes)
@@ -56,7 +55,7 @@ async function resolveMergeConflict() {
   const content = readFileSync(filename);
 
   const response = await openai.chat.completions.create({
-    model: "anthropic/claude-3.7-sonnet",
+    model: AI_MODEL,
     messages: [
       {
         role: "system",
@@ -83,7 +82,6 @@ async function resolveMergeConflict() {
     ],
   });
 
-  // Write the resolved content back to the file
   if (!response.choices || response.choices.length === 0) {
     throw new Error("Error: Received an empty response from the API.");
   }

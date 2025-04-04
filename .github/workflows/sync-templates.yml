@@ -16,20 +16,29 @@ jobs:
     outputs:
       repositories: ${{ steps.config.outputs.repositories }}
     steps:
+      - name: Get GitHub App token
+        uses: actions/create-github-app-token@v1
+        id: get_app_token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ steps.get_app_token.outputs.token }}
 
       - name: Parse repositories from configuration file
         id: config
+        env:
+          GH_TOKEN: ${{ steps.get_app_token.outputs.token }}
         run: |
           CONFIG_FILE="${{ github.event.inputs.config_file || '.github/sync-template-config.json' }}"
           echo "Using configuration file: $CONFIG_FILE"
           
           if [ -f "$CONFIG_FILE" ]; then
-          
-            echo "$CONFIG_FILE"
             # Read and parse the configuration file
             TEMPLATE_REPO=$(jq -rc '.template_repository' "$CONFIG_FILE")
             ALL_REPOSITORIES=($(jq -rc '.repositories[]' "$CONFIG_FILE"))
@@ -39,7 +48,7 @@ jobs:
               PAGE=1
               PER_PAGE=100
               while true; do
-                LIST_REPOS=$(curl -s "https://api.github.com/users/${organization}/repos?per_page=${PER_PAGE}&page=${PAGE}")
+                LIST_REPOS=$(gh api "/orgs/${organization}/repos?per_page=${PER_PAGE}&page=${PAGE}")
                 
                 # Break the loop if the response is not a list
                 if [[ "$(echo "$LIST_REPOS" | jq -r 'type')" == "object" ]]; then
@@ -54,7 +63,14 @@ jobs:
 
                 FILTERED_REPOS=$(echo $LIST_REPOS | jq -rc --arg TEMPLATE_REPO $TEMPLATE_REPO --arg $CUR_REPO ${{ github.repository }} '[.[] | select(.full_name != $TEMPLATE_REPO and .full_name != $CUR_REPO)]')
                 REPOSITORIES=($(echo $FILTERED_REPOS | jq -rc '.[] | .full_name'))
-                ALL_REPOSITORIES+=("${REPOSITORIES[@]}")
+                
+                for repository in "${REPOSITORIES[@]}"; do
+                  REPO_INFO=$(gh api "/repos/${repository}")
+                  if [[ "$(echo "$REPO_INFO" | jq -r '.template_repository.full_name')" == "${TEMPLATE_REPO}" ]]; then
+                    REPO_NAME=$(echo "$REPO_INFO" | jq -rc '.full_name')
+                    ALL_REPOSITORIES+=("${REPO_NAME}")
+                  fi              
+                done
 
                 ((PAGE++))
               done
@@ -64,8 +80,7 @@ jobs:
             LIST_REPOS="[${LIST_REPOS%,}]"
 
             # Set outputs
-            echo "repositories=${LIST_REPOS}" >> $GITHUB_OUTPUT    
-            echo "Configuration loaded successfully"
+            echo "repositories=${LIST_REPOS}" >> $GITHUB_OUTPUT
           fi
       - name: List all repositories
         run: echo $JSON_STRING
