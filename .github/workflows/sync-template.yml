@@ -202,6 +202,7 @@ jobs:
           git reset --hard
           git pull origin ${{ steps.config.outputs.head_branch }}
 
+          bun install || true
           bun knip --fix || true
           bun prettier --write *.ts || true
 
