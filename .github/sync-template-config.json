@@ -1,10 +1,10 @@
 {
     "template_repository": "ubiquity/ts-template",
     "template_branch": "development",
-    "target_branch": "main",
-    "model": "anthropic/claude-3.5-sonnet",
+    "target_branch": "development",
+    "model": "anthropic/claude-3.7-sonnet",
     "organizations": [
-        "ubiquity-whilefoo"
+        "ubiquity"
     ],
     "repositories": [
     ],
