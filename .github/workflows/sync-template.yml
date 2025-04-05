@@ -83,11 +83,13 @@ jobs:
             WHITELISTED_FILES=$(jq -r '.whitelisted_files | join(" ")' "$CONFIG_FILE")
             TARGET_BRANCH=$(jq -r '.target_branch' "$CONFIG_FILE")
             TEMPLATE_BRANCH=$(jq -r '.template_branch' "$CONFIG_FILE")
+            AI_MODEL=$(jq -r '.ai_model' "$CONFIG_FILE")
 
             # Set outputs
             echo "template_repository=$TEMPLATE_REPOSITORY" >> $GITHUB_OUTPUT
             echo "template_branch=$TEMPLATE_BRANCH" >> $GITHUB_OUTPUT
             echo "target_branch=$TARGET_BRANCH" >> $GITHUB_OUTPUT
+            echo "ai_model=$AI_MODEL" >> $GITHUB_OUTPUT
             echo "whitelisted_files=$WHITELISTED_FILES" >> $GITHUB_OUTPUT    
             
             TARGET_REPOSITORY=$(basename ${{ github.event.inputs.target_repository || inputs.target_repository }})
@@ -115,6 +117,7 @@ jobs:
         env: 
           WHITELISTED_FILES: "${{ steps.config.outputs.whitelisted_files }} ${{ github.event.inputs.additional_whitelisted_files}}"
           OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          AI_MODEL: ${{ steps.config.outputs.ai_model }}
         run: |
           base_path=$(pwd)
           cli_path="${base_path}/sync-template-cli"
@@ -195,7 +198,7 @@ jobs:
           repository: ${{ steps.config.outputs.target_repository }}
           working-directory: target-to-synced
           
-      - name: Run knip and prettier, update bun.lock file
+      - name: Run knip and prettier
         run: |
           cd target-to-synced
 

@@ -2,7 +2,7 @@
     "template_repository": "ubiquity/ts-template",
     "template_branch": "development",
     "target_branch": "development",
-    "model": "anthropic/claude-3.7-sonnet",
+    "ai_model": "anthropic/claude-3.7-sonnet",
     "organizations": [
         "ubiquity"
     ],
