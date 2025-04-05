@@ -1,0 +1,261 @@
+name: Sync template repository to branch
+
+on:
+  workflow_call:
+    inputs:
+      target_repository:
+        description: 'Repository to be synced'
+        required: true
+        default: ''
+        type: string
+      config_file:
+        description: 'Path to a JSON configuration file'
+        required: false
+        default: '.github/sync-template-config.json'
+        type: string
+    secrets:
+      APP_ID:
+        required: true
+      APP_PRIVATE_KEY:
+        required: true
+
+  workflow_dispatch:
+    inputs:
+      target_repository:
+        description: 'Repository to be synced'
+        required: true
+        default: ''
+        type: string
+      config_file:
+        description: 'Path to a JSON configuration file'
+        required: false
+        default: '.github/sync-template-config.json'
+        type: string
+      additional_whitelisted_files:
+        description: 'Additional files to be synced'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  sync-template:
+    runs-on: ubuntu-latest
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+          
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Install dependencies
+        run: |
+          cd sync-template-cli
+          bun install
+
+      - name: Get GitHub App token
+        uses: actions/create-github-app-token@v1
+        id: get_app_token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Checkout target repository
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ github.event.inputs.target_repository || inputs.target_repository }}
+          path: 'target-to-synced'
+          token: ${{ steps.get_app_token.outputs.token }}
+
+      - name: Parse configuration
+        id: config
+        run: |
+          CONFIG_FILE="${{ github.event.inputs.config_file || inputs.config_file }}"
+          echo "Using configuration file: $CONFIG_FILE"
+          
+          if [ -f "$CONFIG_FILE" ]; then
+            # Read and parse the configuration file
+            TEMPLATE_REPOSITORY=$(jq -r '.template_repository' "$CONFIG_FILE")
+            WHITELISTED_FILES=$(jq -r '.whitelisted_files | join(" ")' "$CONFIG_FILE")
+            TARGET_BRANCH=$(jq -r '.target_branch' "$CONFIG_FILE")
+            TEMPLATE_BRANCH=$(jq -r '.template_branch' "$CONFIG_FILE")
+            AI_MODEL=$(jq -r '.ai_model' "$CONFIG_FILE")
+
+            # Set outputs
+            echo "template_repository=$TEMPLATE_REPOSITORY" >> $GITHUB_OUTPUT
+            echo "template_branch=$TEMPLATE_BRANCH" >> $GITHUB_OUTPUT
+            echo "target_branch=$TARGET_BRANCH" >> $GITHUB_OUTPUT
+            echo "ai_model=$AI_MODEL" >> $GITHUB_OUTPUT
+            echo "whitelisted_files=$WHITELISTED_FILES" >> $GITHUB_OUTPUT    
+            
+            TARGET_REPOSITORY=$(basename ${{ github.event.inputs.target_repository || inputs.target_repository }})
+            echo "target_repository=$TARGET_REPOSITORY" >> $GITHUB_OUTPUT
+
+            HEAD_BRANCH=sync-template/${TARGET_BRANCH}
+            echo "head_branch=$HEAD_BRANCH" >> $GITHUB_OUTPUT
+
+            echo "Configuration loaded successfully"
+          else
+            echo "Error: Configuration file not found at $CONFIG_FILE"
+            exit 1
+          fi
+
+      - name: Setup Git config
+        env:
+          GH_TOKEN: ${{ steps.get_app_token.outputs.token }}
+        run: |
+          user_id=$(gh api "/users/${{ steps.get_app_token.outputs.app-slug }}[bot]" --jq .id)
+
+          git config --global user.name "${{ steps.get_app_token.outputs.app-slug }}[bot]"
+          git config --global user.email "${user_id}+${{ steps.get_app_token.outputs.app-slug }}[bot]@users.noreply.github.com"
+
+      - name: Sync template repository
+        env: 
+          WHITELISTED_FILES: "${{ steps.config.outputs.whitelisted_files }} ${{ github.event.inputs.additional_whitelisted_files}}"
+          OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+          AI_MODEL: ${{ steps.config.outputs.ai_model }}
+        run: |
+          base_path=$(pwd)
+          cli_path="${base_path}/sync-template-cli"
+      
+          cd target-to-synced
+          cur_path=$(pwd)
+          target_branch=${{ steps.config.outputs.target_branch }}
+
+          git fetch origin
+          git checkout ${target_branch}
+          
+          git remote add template https://github.com/${{ steps.config.outputs.template_repository }}
+          git fetch template
+
+          git checkout -b ${{ steps.config.outputs.head_branch }}
+
+          # Execute git merge
+          merge_output=$(git merge --squash template/${{ steps.config.outputs.template_branch }} --allow-unrelated-histories || true)
+
+          # Enable extended globbing and recursive glob matching
+          shopt -s extglob globstar
+
+          # Convert into a list of whitelisted files
+          read -a WHITELISTED_ARRAY <<< "$WHITELISTED_FILES"
+
+          matches_whitelisted() {
+            local file="$1"
+            for pattern in "${WHITELISTED_ARRAY[@]}"; do
+                if [[ $file == $pattern ]]; then
+                    return 0  # Match found
+                fi
+            done
+            return 1  # No match
+          }
+
+          # Check new files and remove them if not in the whitelisted list
+          all_changes=$(git status -s | grep "^A " | awk '{print $2}')
+          for change in $all_changes; do
+            if ! matches_whitelisted "$change"; then
+              git rm -f $change
+            fi
+          done
+
+          # Check for merge conflicts
+          if echo "$merge_output" | grep "CONFLICT"; then
+            echo "Merge conflicts detected. Parsing output..."
+            # Parse the output of git merge for conflict files
+            conflict_files=$(echo "$merge_output" | grep "CONFLICT" | awk '{print $6}')
+            
+            # Output the list of files with merge conflicts
+            if [ -z "$conflict_files" ]; then
+                echo "No conflict files found."
+            else
+                for conflict_file in $conflict_files; do
+                  if ! matches_whitelisted "$conflict_file"; then
+                    echo "Checking out HEAD version: " $conflict_file
+                    git checkout $target_branch -- $conflict_file
+                  else
+                    echo "Fixing merge conflict: " $conflict_file
+                    bun run --cwd ${cli_path} src/index.ts ${cur_path}/${conflict_file}
+                  fi
+                done
+            fi
+          else
+            echo "Merge completed successfully with no conflicts."
+          fi
+
+          # Stage changes
+          git add .
+
+      - name: Create verified commit
+        uses: dsanders11/github-app-commit-action@v1.5.0
+        with:
+          message: "chore: sync template(with potential conflicts)"
+          force: true
+          token: ${{ steps.get_app_token.outputs.token }}
+          ref: ${{ steps.config.outputs.head_branch }}
+          repository: ${{ steps.config.outputs.target_repository }}
+          working-directory: target-to-synced
+          
+      - name: Run knip and prettier
+        run: |
+          cd target-to-synced
+
+          git reset --hard
+          git pull origin ${{ steps.config.outputs.head_branch }}
+
+          bun install || true
+          bun knip --fix || true
+          bun prettier --write *.ts || true
+
+          git add .
+          git status
+
+      - name: Create verified commit
+        uses: dsanders11/github-app-commit-action@v1.5.0
+        with:
+          message: "chore: execute knip fix and prettier"
+          force: true
+          token: ${{ steps.get_app_token.outputs.token }}
+          ref: ${{ steps.config.outputs.head_branch }}
+          repository: ${{ steps.config.outputs.target_repository }}
+          working-directory: target-to-synced
+          fail-on-no-changes: false
+
+      - name: Update bun.lock file
+        run: |
+          cd target-to-synced
+
+          git reset --hard
+          git pull origin ${{ steps.config.outputs.head_branch }}
+
+          bun install || true
+          git add bun.lock || true
+
+          git add .
+          git status
+
+      - name: Create verified commit
+        uses: dsanders11/github-app-commit-action@v1.5.0
+        with:
+          message: "chore: updated bun.lock file"
+          force: true
+          token: ${{ steps.get_app_token.outputs.token }}
+          ref: ${{ steps.config.outputs.head_branch }}
+          repository: ${{ steps.config.outputs.target_repository }}
+          working-directory: target-to-synced
+          fail-on-no-changes: false
+
+      - name: Create PR
+        env:
+          GH_TOKEN: ${{ steps.get_app_token.outputs.token }}
+        run: |
+          cd target-to-synced
+          template_repository=${{ steps.config.outputs.template_repository }}
+          
+          # Create PR
+          gh pr create --title "Sync $template_repository repository (manual resolution required)" \
+                      --body "This pull request merges changes from the template repository. There may be conflicts that require manual resolution." \
+                      --head ${{ steps.config.outputs.head_branch }} \
+                      --base ${{ steps.config.outputs.target_branch }} || true

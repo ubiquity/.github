@@ -1,0 +1,151 @@
+name: Sync template repositories
+on:
+  schedule:
+    - cron: '0 0 14 * *'
+  workflow_dispatch:
+    inputs:
+      config_file:
+        description: 'Path to a JSON configuration file'
+        required: false
+        default: '.github/sync-template-config.json'
+        type: string
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      repositories: ${{ steps.config.outputs.repositories }}
+    steps:
+      - name: Get GitHub App token
+        uses: actions/create-github-app-token@v1
+        id: get_app_token
+        with:
+          app-id: ${{ secrets.APP_ID }}
+          private-key: ${{ secrets.APP_PRIVATE_KEY }}
+          owner: ${{ github.repository_owner }}
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.get_app_token.outputs.token }}
+
+      - name: Parse repositories from configuration file
+        id: config
+        env:
+          GH_TOKEN: ${{ steps.get_app_token.outputs.token }}
+        run: |
+          CONFIG_FILE="${{ github.event.inputs.config_file || '.github/sync-template-config.json' }}"
+          echo "Using configuration file: $CONFIG_FILE"
+          
+          if [ -f "$CONFIG_FILE" ]; then
+            # Read and parse the configuration file
+            TEMPLATE_REPO=$(jq -rc '.template_repository' "$CONFIG_FILE")
+            ALL_REPOSITORIES=($(jq -rc '.repositories[]' "$CONFIG_FILE"))
+            TEMPLATE_BRANCH=$(jq -rc '.template_branch' "$CONFIG_FILE")
+            TARGET_BRANCH=$(jq -rc '.target_branch' "$CONFIG_FILE")
+            
+            ORGANIZATIONS=($(jq -rc '.organizations[]' "$CONFIG_FILE"))
+            for organization in "${ORGANIZATIONS[@]}"; do
+              PAGE=1
+              PER_PAGE=100
+              while true; do
+                LIST_REPOS=$(gh api "/orgs/${organization}/repos?per_page=${PER_PAGE}&page=${PAGE}")
+                
+                # Break the loop if the response is not a list
+                if [[ "$(echo "$LIST_REPOS" | jq -r 'type')" == "object" ]]; then
+                  echo "Error: $LIST_REPOS"
+                  break
+                fi
+
+                # Break the loop if the response is empty
+                if $(echo "$LIST_REPOS" | jq -e 'length == 0' > /dev/null); then
+                  break
+                fi
+
+                FILTERED_REPOS=$(echo $LIST_REPOS | jq -rc --arg TEMPLATE_REPO $TEMPLATE_REPO --arg $CUR_REPO ${{ github.repository }} '[.[] | select(.full_name != $TEMPLATE_REPO and .full_name != $CUR_REPO)]')
+                REPOSITORIES=($(echo $FILTERED_REPOS | jq -rc '.[] | .full_name'))
+                
+                CUR_PATH=$(pwd)
+                for repository in "${REPOSITORIES[@]}"; do
+                  cd $CUR_PATH
+
+                  # Skip if it is a template repo itself
+                  if [[ "$repository" == "$TEMPLATE_REPO" ]]; then
+                    continue
+                  fi
+
+                  REPO_INFO=$(gh api "/repos/${repository}")
+
+                  # Skip if the repository is disabled or archived
+                  ARCHIVED=$(echo "$REPO_INFO" | jq -r '.archived')
+                  DISABLED=$(echo "$REPO_INFO" | jq -r '.disabled')
+                  IS_TEMPLATE=$(echo "$REPO_INFO" | jq -r '.is_template')
+                  if [[ "$ARCHIVED" == "true" || "$DISABLED" == "true" || "$IS_TEMPLATE" == "true" ]]; then
+                    continue
+                  fi
+              
+                  # If it is a forked repository, get the repo it is forked from.
+                  OUTPUT=${repository}
+                  PARENT_REPO=$(echo "$REPO_INFO" | jq -r '.parent.full_name')
+                  while [[ "$PARENT_REPO" != "null" ]]; do
+                    OUTPUT=${PARENT_REPO}
+                    PARENT_REPO_INFO=$(gh api "/repos/${OUTPUT}")
+                    PARENT_REPO=$(echo "$PARENT_REPO_INFO" | jq -r '.parent.full_name')
+                  done
+
+                  # Check if the repository is generated from the template repo
+                  REPO_INFO=$(gh api "/repos/${OUTPUT}")
+                  if [[ "$(echo "$REPO_INFO" | jq -r '.template_repository.full_name')" == "${TEMPLATE_REPO}" ]]; then
+                    REPO_NAME=$(echo "$REPO_INFO" | jq -rc '.full_name')
+                    ALL_REPOSITORIES+=("${repository}")
+                    continue
+                  fi
+
+                  # Check if the repo can be synced using git merge-base.
+                  output_clone=$(echo "${repository}" | sed 's/\//_/g')
+                  git clone https://github.com/${repository} ${output_clone}
+
+                  cd ${output_clone}
+                  git fetch -q origin
+                  git remote add template https://github.com/${TEMPLATE_REPO}
+                  git fetch -q template
+
+                  if [[ $(git merge-base ${TARGET_BRANCH} template/${TEMPLATE_BRANCH}) ]]; then
+                    REPO_NAME=$(echo "$REPO_INFO" | jq -rc '.full_name')
+                    ALL_REPOSITORIES+=("${repository}")
+                    continue
+                  fi
+                done
+
+                ((PAGE++))
+              done
+            done
+            
+            LIST_REPOS=$(printf '"%s",' "${ALL_REPOSITORIES[@]}")
+            LIST_REPOS="[${LIST_REPOS%,}]"
+
+            # Set outputs
+            echo "repositories=${LIST_REPOS}" >> $GITHUB_OUTPUT
+          fi
+      - name: List all repositories
+        run: echo $JSON_STRING
+        env:
+          JSON_STRING: ${{ steps.config.outputs.repositories }}
+
+  sync-repositories:
+    needs: prepare
+    strategy:
+      matrix: 
+        repository: ${{ fromJson(needs.prepare.outputs.repositories) }}
+      fail-fast: false
+      max-parallel: 15
+    permissions:
+      actions: write
+      contents: write
+      pull-requests: write
+    uses: ./.github/workflows/sync-template.yml
+    with:
+      target_repository: ${{ matrix.repository }}
+      config_file: "${{ github.event.inputs.config_file || '.github/sync-template-config.json' }}"
+    secrets: inherit
