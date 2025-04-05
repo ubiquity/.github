@@ -98,7 +98,7 @@ jobs:
                   REPO_INFO=$(gh api "/repos/${OUTPUT}")
                   if [[ "$(echo "$REPO_INFO" | jq -r '.template_repository.full_name')" == "${TEMPLATE_REPO}" ]]; then
                     REPO_NAME=$(echo "$REPO_INFO" | jq -rc '.full_name')
-                    ALL_REPOSITORIES+=("${REPO_NAME}")
+                    ALL_REPOSITORIES+=("${repository}")
                     continue
                   fi
 
@@ -113,7 +113,7 @@ jobs:
 
                   if [[ $(git merge-base ${TARGET_BRANCH} template/${TEMPLATE_BRANCH}) ]]; then
                     REPO_NAME=$(echo "$REPO_INFO" | jq -rc '.full_name')
-                    ALL_REPOSITORIES+=("${REPO_NAME}")
+                    ALL_REPOSITORIES+=("${repository}")
                     continue
                   fi
                 done
