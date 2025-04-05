@@ -80,7 +80,8 @@ jobs:
                   # Skip if the repository is disabled or archived
                   ARCHIVED=$(echo "$REPO_INFO" | jq -r '.archived')
                   DISABLED=$(echo "$REPO_INFO" | jq -r '.disabled')
-                  if [[ "$ARCHIVED" == "true" || "$DISABLED" == "true" ]]; then
+                  IS_TEMPLATE=$(echo "$REPO_INFO" | jq -r '.is_template')
+                  if [[ "$ARCHIVED" == "true" || "$DISABLED" == "true" || "$IS_TEMPLATE" == "true" ]]; then
                     continue
                   fi
               
