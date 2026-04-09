@@ -1,0 +1,14 @@
+{
+  "name": "proposal-router",
+  "version": "1.0.0",
+  "description": "Auto-routing proposal system using keyword/embedding similarity to target the correct ubiquity repository",
+  "main": "api/route.js",
+  "scripts": {
+    "start": "node api/route.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2"
+  },
+  "keywords": ["proposal", "routing", "ubiquity"],
+  "license": "MIT"
+}

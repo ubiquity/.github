@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ubiquity Proposal Router</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🚀 Proposal Router</h1>
+      <p class="subtitle">Create a proposal and we'll auto-route it to the right repository</p>
+    </header>
+
+    <form id="proposal-form">
+      <div class="field">
+        <label for="title">Title</label>
+        <input type="text" id="title" placeholder="e.g. Add liquidity pool for UBC/USDC" required />
+      </div>
+      <div class="field">
+        <label for="body">Body</label>
+        <textarea id="body" rows="8" placeholder="Describe your proposal in detail..." required></textarea>
+      </div>
+      <button type="submit" id="route-btn">Route Proposal</button>
+    </form>
+
+    <div id="results" class="hidden">
+      <h2>Routing Results</h2>
+      <div id="scores"></div>
+      <div id="recommendation"></div>
+      <button id="confirm-btn" class="secondary">Create Issue in Recommended Repo</button>
+    </div>
+
+    <div id="status" class="hidden"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
