@@ -1,0 +1,806 @@
+{
+  "schemaVersion": 1,
+  "worker": "040-proposal-browser-proof",
+  "outcome": "passed",
+  "startedAt": "2026-09-22T11:07:02.248Z",
+  "finishedAt": "2026-09-22T11:07:04.776Z",
+  "durationMs": 2528,
+  "host": "linux/aarch64",
+  "denoVersion": "2.9.6",
+  "worktreeRoot": "/home/codex/repos/ubiquity/.github/.codex-worktrees/plan-m-proposal-composer-a97d40fc55e",
+  "registeredCommand": "deno run --no-config --cached-only --allow-read=proposal-router,.cleanup-evidence,/usr/bin/chromium --allow-write=.cleanup-evidence/proposal-browser-proof --allow-net=127.0.0.1:8138 --allow-run=/home/codex/.local/bin/agent-browser --allow-env=HOME,TMPDIR,PATH .cleanup-evidence/proposal-browser-proof.ts",
+  "registeredCwd": "/home/codex/repos/ubiquity/.github/.codex-worktrees/plan-m-proposal-composer-a97d40fc55e",
+  "assignment": {
+    "base": "12609d2488f281e625a314fa46c62b6bf202f478",
+    "branch": "codex/plan-m-proposal-composer-a97d40fc55e",
+    "note": "recorded from the assignment; this driver does not run git and does not verify repository state"
+  },
+  "staticServer": {
+    "started": true,
+    "stopped": true,
+    "host": "127.0.0.1",
+    "port": 8138,
+    "url": "http://127.0.0.1:8138/proposal-router/",
+    "fsRoot": "/home/codex/repos/ubiquity/.github/.codex-worktrees/plan-m-proposal-composer-a97d40fc55e/proposal-router",
+    "urlRoot": "proposal-router",
+    "module": "jsr:@std/http@1.0.21/file-server serveDir"
+  },
+  "browser": {
+    "cli": "/home/codex/.local/bin/agent-browser",
+    "namespace": "uos-pr-cleanup-01a0c790",
+    "session": "proposal-router",
+    "configPath": ".cleanup-evidence/proposal-browser-proof/agent-browser.config.json",
+    "executablePath": "/usr/bin/chromium",
+    "allowedDomains": "127.0.0.1,localhost",
+    "childEnvKeys": [
+      "HOME",
+      "PATH",
+      "TMPDIR"
+    ],
+    "globals": [
+      "--namespace",
+      "uos-pr-cleanup-01a0c790",
+      "--session",
+      "proposal-router",
+      "--config",
+      "/home/codex/repos/ubiquity/.github/.codex-worktrees/plan-m-proposal-composer-a97d40fc55e/.cleanup-evidence/proposal-browser-proof/agent-browser.config.json",
+      "--executable-path",
+      "/usr/bin/chromium",
+      "--allowed-domains",
+      "127.0.0.1,localhost",
+      "--no-webmcp",
+      "--json"
+    ],
+    "preflightOwnedSession": {
+      "status": "inactive-runtime",
+      "exitCode": 0,
+      "timedOut": false,
+      "session": "proposal-router",
+      "namespace": "uos-pr-cleanup-01a0c790",
+      "active": false,
+      "pid": null,
+      "browserLaunched": null,
+      "pageCount": null,
+      "runtimeReported": false,
+      "detail": "{\"success\":true,\"data\":{\"active\":false,\"namespace\":\"uos-pr-cleanup-01a0c790\",\"pid\":null,\"runtime\":null,\"runtimeError\":null,\"session\":\"proposal-router\",\"socketDir\":\"/home/codex/.agent-browser/namespaces/uos-pr-cleanup-01a0c790/run\",\"version\":null}}"
+    },
+    "postCloseOwnedSession": {
+      "status": "idle",
+      "exitCode": 0,
+      "timedOut": false,
+      "session": "proposal-router",
+      "namespace": "uos-pr-cleanup-01a0c790",
+      "active": true,
+      "pid": 3157880,
+      "browserLaunched": false,
+      "pageCount": 0,
+      "runtimeReported": true,
+      "detail": "{\"success\":true,\"data\":{\"active\":true,\"namespace\":\"uos-pr-cleanup-01a0c790\",\"pid\":3157880,\"runtime\":{\"backgroundPid\":3157880,\"browserLaunched\":false,\"compatibilityStatus\":\"current\",\"effectiveLaunch\":{\"browserLaunched\":false,\"engine\":\"chrome\",\"launchHash\":null},\"engine\":\"chrome\",\"launchHash\":null,\"lifecycle\":{\"effectiveLaunch\":{\"browserLaunched\":false,\"engine\":\"chrome\",\"launchHash\":null},\"launched\":false,\"relaunchedBrowser\":false,\"restartedBackground\":false,\"restoreStatus\":\"not_configured\",\"reused\":false,\"saveStatus\":\"not_configured\"},\"namespace\":\"uos-pr-cleanup-01a0c790\",\"pageCount\":0,\"restore…"
+    },
+    "cleanupEvidence": "Lifecycle absence is judged from exact `session info` runtime metadata (browserLaunched===false and pageCount===0, or an absent/inactive runtime), not from `session list`, which returned [] on agent-browser 0.36.0 while this exact session still had a launched browser. `active` is daemon activity, not browser liveness; `close` proves no launched browser remains, not that the daemon process terminated."
+  },
+  "steps": [
+    {
+      "id": "00-setup",
+      "description": "create the task-owned evidence directory and isolated empty agent-browser config",
+      "status": "passed",
+      "assertions": [
+        {
+          "name": "agent-browser config is an empty JSON object",
+          "expected": "{}",
+          "actual": "{}",
+          "ok": true
+        }
+      ],
+      "durationMs": 11
+    },
+    {
+      "id": "01-preflight",
+      "description": "verify host tools, worktree root, and that this namespace has no existing owned session",
+      "status": "passed",
+      "assertions": [
+        {
+          "name": "driver cwd is the worktree root",
+          "expected": "/home/codex/repos/ubiquity/.github/.codex-worktrees/plan-m-proposal-composer-a97d40fc55e",
+          "actual": "/home/codex/repos/ubiquity/.github/.codex-worktrees/plan-m-proposal-composer-a97d40fc55e",
+          "ok": true
+        },
+        {
+          "name": "proposal-router/index.html exists",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "proposal-router/main.js exists",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "proposal-router/router.js exists",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "proposal-router/styles.css exists",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "proposal-router/repositories.json exists",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "chromium executable exists",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "agent-browser --version exit code",
+          "expected": 0,
+          "actual": 0,
+          "ok": true
+        },
+        {
+          "name": "agent-browser version",
+          "expected": "agent-browser 0.36.0",
+          "actual": "agent-browser 0.36.0",
+          "ok": true
+        },
+        {
+          "name": "preflight session info reports the owned session",
+          "expected": "proposal-router",
+          "actual": "proposal-router",
+          "ok": true
+        },
+        {
+          "name": "preflight session info reports the owned namespace",
+          "expected": "uos-pr-cleanup-01a0c790",
+          "actual": "uos-pr-cleanup-01a0c790",
+          "ok": true
+        },
+        {
+          "name": "preflight found no launched browser for uos-pr-cleanup-01a0c790/proposal-router (absent or idle own daemon is safe)",
+          "expected": true,
+          "actual": true,
+          "ok": true,
+          "detail": "{\"status\":\"inactive-runtime\",\"exitCode\":0,\"timedOut\":false,\"session\":\"proposal-router\",\"namespace\":\"uos-pr-cleanup-01a0c790\",\"active\":false,\"pid\":null,\"browserLaunched\":null,\"pageCount\":null,\"runtimeReported\":false,\"detail\":\"{\\\"success\\\":true,\\\"data\\\":{\\\"active\\\":false,\\\"namespace\\\":\\\"uos-pr-cleanup-01a0c790\\\",\\\"pid\\\":null,\\\"runtime\\\":null,\\\"runtimeError\\\":null,\\\"session\\\":\\\"proposal-router\\\",\\\"so…"
+        }
+      ],
+      "durationMs": 9
+    },
+    {
+      "id": "02-static-server",
+      "description": "bind 127.0.0.1:8138, serve only proposal-router/, and verify MIME types",
+      "status": "passed",
+      "assertions": [
+        {
+          "name": "GET /proposal-router/ status",
+          "expected": 200,
+          "actual": 200,
+          "ok": true
+        },
+        {
+          "name": "GET /proposal-router/ content-type contains text/html",
+          "expected": true,
+          "actual": true,
+          "ok": true,
+          "detail": "text/html; charset=UTF-8"
+        },
+        {
+          "name": "GET /proposal-router/main.js status",
+          "expected": 200,
+          "actual": 200,
+          "ok": true
+        },
+        {
+          "name": "GET /proposal-router/main.js content-type contains javascript",
+          "expected": true,
+          "actual": true,
+          "ok": true,
+          "detail": "text/javascript; charset=UTF-8"
+        },
+        {
+          "name": "GET /proposal-router/styles.css status",
+          "expected": 200,
+          "actual": 200,
+          "ok": true
+        },
+        {
+          "name": "GET /proposal-router/styles.css content-type contains text/css",
+          "expected": true,
+          "actual": true,
+          "ok": true,
+          "detail": "text/css; charset=UTF-8"
+        },
+        {
+          "name": "GET /proposal-router/repositories.json status",
+          "expected": 200,
+          "actual": 200,
+          "ok": true
+        },
+        {
+          "name": "GET /proposal-router/repositories.json content-type contains application/json",
+          "expected": true,
+          "actual": true,
+          "ok": true,
+          "detail": "application/json; charset=UTF-8"
+        },
+        {
+          "name": "GET /README.md status",
+          "expected": 404,
+          "actual": 404,
+          "ok": true
+        }
+      ],
+      "durationMs": 19
+    },
+    {
+      "id": "03-open-and-snapshot",
+      "description": "acceptance 1: open the real local page and snapshot the interactive tree",
+      "status": "passed",
+      "assertions": [
+        {
+          "name": "interactive snapshot tree is non-empty",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "interactive snapshot contains the pay.ubq.fi card",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "interactive snapshot contains the Copy Link button",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "interactive snapshot contains the Open GitHub Issue link",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "initial location",
+          "expected": "http://127.0.0.1:8138/proposal-router/",
+          "actual": "http://127.0.0.1:8138/proposal-router/",
+          "ok": true
+        },
+        {
+          "name": "initial suggestion count",
+          "expected": 5,
+          "actual": 5,
+          "ok": true
+        },
+        {
+          "name": "initial first suggestion",
+          "expected": "ubiquity/pay.ubq.fi",
+          "actual": "ubiquity/pay.ubq.fi",
+          "ok": true
+        },
+        {
+          "name": "initial auto-selected repository",
+          "expected": "ubiquity/pay.ubq.fi",
+          "actual": "ubiquity/pay.ubq.fi",
+          "ok": true
+        },
+        {
+          "name": "initial issue link is disabled",
+          "expected": "true",
+          "actual": "true",
+          "ok": true
+        },
+        {
+          "name": "initial issue link href placeholder",
+          "expected": "#",
+          "actual": "#",
+          "ok": true
+        },
+        {
+          "name": "initial score labels are keyword match scores without percent claims",
+          "expected": true,
+          "actual": true,
+          "ok": true,
+          "detail": "[\"Keyword match score: 0\",\"Keyword match score: 0\",\"Keyword match score: 0\",\"Keyword match score: 0\",\"Keyword match score: 0\"]"
+        },
+        {
+          "name": "initial page text contains no percent sign",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        }
+      ],
+      "durationMs": 1725
+    },
+    {
+      "id": "04-query-a",
+      "description": "acceptance 2: query A auto-selects pay.ubq.fi and round-trips title/body",
+      "status": "passed",
+      "assertions": [
+        {
+          "name": "query A first suggestion",
+          "expected": "ubiquity/pay.ubq.fi",
+          "actual": "ubiquity/pay.ubq.fi",
+          "ok": true
+        },
+        {
+          "name": "query A auto-selected repository",
+          "expected": "ubiquity/pay.ubq.fi",
+          "actual": "ubiquity/pay.ubq.fi",
+          "ok": true
+        },
+        {
+          "name": "query A auto-filled title",
+          "expected": "Fix the cash out interface on pay.ubq.fi because the claim screen is not centered.",
+          "actual": "Fix the cash out interface on pay.ubq.fi because the claim screen is not centered.",
+          "ok": true
+        },
+        {
+          "name": "query A issue href",
+          "expected": "https://github.com/ubiquity/pay.ubq.fi/issues/new?title=Fix+the+cash+out+interface+on+pay.ubq.fi+because+the+claim+screen+is+not+centered.&body=Fix+the+cash+out+interface+on+pay.ubq.fi+because+the+claim+screen+is+not+centered.",
+          "actual": "https://github.com/ubiquity/pay.ubq.fi/issues/new?title=Fix+the+cash+out+interface+on+pay.ubq.fi+because+the+claim+screen+is+not+centered.&body=Fix+the+cash+out+interface+on+pay.ubq.fi+because+the+claim+screen+is+not+centered.",
+          "ok": true
+        },
+        {
+          "name": "query A decoded title",
+          "expected": "Fix the cash out interface on pay.ubq.fi because the claim screen is not centered.",
+          "actual": "Fix the cash out interface on pay.ubq.fi because the claim screen is not centered.",
+          "ok": true
+        },
+        {
+          "name": "query A decoded body",
+          "expected": "Fix the cash out interface on pay.ubq.fi because the claim screen is not centered.",
+          "actual": "Fix the cash out interface on pay.ubq.fi because the claim screen is not centered.",
+          "ok": true
+        },
+        {
+          "name": "query A issue link enabled",
+          "expected": "false",
+          "actual": "false",
+          "ok": true
+        },
+        {
+          "name": "query A location unchanged",
+          "expected": "http://127.0.0.1:8138/proposal-router/",
+          "actual": "http://127.0.0.1:8138/proposal-router/",
+          "ok": true
+        }
+      ],
+      "durationMs": 62
+    },
+    {
+      "id": "05-manual-selection",
+      "description": "acceptance 3: manual ubiquity/ubiquity-dollar selection retargets the issue URL",
+      "status": "passed",
+      "assertions": [
+        {
+          "name": "manual selection value",
+          "expected": "ubiquity/ubiquity-dollar",
+          "actual": "ubiquity/ubiquity-dollar",
+          "ok": true
+        },
+        {
+          "name": "manual selection keeps title",
+          "expected": "Fix the cash out interface on pay.ubq.fi because the claim screen is not centered.",
+          "actual": "Fix the cash out interface on pay.ubq.fi because the claim screen is not centered.",
+          "ok": true
+        },
+        {
+          "name": "manual selection keeps body",
+          "expected": "Fix the cash out interface on pay.ubq.fi because the claim screen is not centered.",
+          "actual": "Fix the cash out interface on pay.ubq.fi because the claim screen is not centered.",
+          "ok": true
+        },
+        {
+          "name": "manual selection retargets issue href",
+          "expected": "https://github.com/ubiquity/ubiquity-dollar/issues/new?title=Fix+the+cash+out+interface+on+pay.ubq.fi+because+the+claim+screen+is+not+centered.&body=Fix+the+cash+out+interface+on+pay.ubq.fi+because+the+claim+screen+is+not+centered.",
+          "actual": "https://github.com/ubiquity/ubiquity-dollar/issues/new?title=Fix+the+cash+out+interface+on+pay.ubq.fi+because+the+claim+screen+is+not+centered.&body=Fix+the+cash+out+interface+on+pay.ubq.fi+because+the+claim+screen+is+not+centered.",
+          "ok": true
+        },
+        {
+          "name": "manual selection option is offered",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        }
+      ],
+      "durationMs": 15
+    },
+    {
+      "id": "06-query-b-pinned",
+      "description": "acceptance 4: query B ranks the kernel first but keeps the out-of-top-5 manual selection",
+      "status": "passed",
+      "assertions": [
+        {
+          "name": "query B first suggestion",
+          "expected": "ubiquity-os/ubiquity-os-kernel",
+          "actual": "ubiquity-os/ubiquity-os-kernel",
+          "ok": true
+        },
+        {
+          "name": "query B suggestion count",
+          "expected": 5,
+          "actual": 5,
+          "ok": true
+        },
+        {
+          "name": "query B keeps manual repository selected",
+          "expected": "ubiquity/ubiquity-dollar",
+          "actual": "ubiquity/ubiquity-dollar",
+          "ok": true
+        },
+        {
+          "name": "query B option count includes the appended manual selection",
+          "expected": 6,
+          "actual": 6,
+          "ok": true
+        },
+        {
+          "name": "query B manual selection is appended last",
+          "expected": "ubiquity/ubiquity-dollar",
+          "actual": "ubiquity/ubiquity-dollar",
+          "ok": true
+        },
+        {
+          "name": "query B manual selection is outside the top 5 ranked options",
+          "expected": true,
+          "actual": true,
+          "ok": true,
+          "detail": "[\"ubiquity-os/ubiquity-os-kernel\",\"ubiquity-os/ubiquity-os-plugin-installer\",\"ubiquity/ubq.fi-router\",\"ubiquity/.github\",\"ubiquity/pay.ubq.fi\",\"ubiquity/ubiquity-dollar\"]"
+        },
+        {
+          "name": "query B href stays on the manual repository",
+          "expected": "https://github.com/ubiquity/ubiquity-dollar/issues/new?title=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.&body=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.",
+          "actual": "https://github.com/ubiquity/ubiquity-dollar/issues/new?title=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.&body=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.",
+          "ok": true
+        },
+        {
+          "name": "query B decoded title round-trip",
+          "expected": "Route a new webhook command to the correct plugin in the kernel.",
+          "actual": "Route a new webhook command to the correct plugin in the kernel.",
+          "ok": true
+        },
+        {
+          "name": "query B decoded body round-trip",
+          "expected": "Route a new webhook command to the correct plugin in the kernel.",
+          "actual": "Route a new webhook command to the correct plugin in the kernel.",
+          "ok": true
+        },
+        {
+          "name": "query B auto-filled title",
+          "expected": "Route a new webhook command to the correct plugin in the kernel.",
+          "actual": "Route a new webhook command to the correct plugin in the kernel.",
+          "ok": true
+        },
+        {
+          "name": "query B location unchanged",
+          "expected": "http://127.0.0.1:8138/proposal-router/",
+          "actual": "http://127.0.0.1:8138/proposal-router/",
+          "ok": true
+        }
+      ],
+      "durationMs": 30
+    },
+    {
+      "id": "07-normal-evidence",
+      "description": "capture the re-ranked interactive snapshot and the normal screenshot",
+      "status": "passed",
+      "assertions": [
+        {
+          "name": "query B snapshot contains the kernel card",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "query B snapshot contains the keyword score label",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "screenshot-normal exists",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "screenshot-normal is non-empty",
+          "expected": true,
+          "actual": true,
+          "ok": true,
+          "detail": "88672"
+        },
+        {
+          "name": "screenshot-normal has a PNG signature",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        }
+      ],
+      "durationMs": 91
+    },
+    {
+      "id": "08-reload-autoselect",
+      "description": "acceptance 5: after reload, query B auto-selects ubiquity-os/ubiquity-os-kernel",
+      "status": "passed",
+      "assertions": [
+        {
+          "name": "reload clears the proposal",
+          "expected": "",
+          "actual": "",
+          "ok": true
+        },
+        {
+          "name": "reload restores the catalog auto-selection",
+          "expected": "ubiquity/pay.ubq.fi",
+          "actual": "ubiquity/pay.ubq.fi",
+          "ok": true
+        },
+        {
+          "name": "reload query B auto-selected kernel",
+          "expected": "ubiquity-os/ubiquity-os-kernel",
+          "actual": "ubiquity-os/ubiquity-os-kernel",
+          "ok": true
+        },
+        {
+          "name": "reload query B first suggestion",
+          "expected": "ubiquity-os/ubiquity-os-kernel",
+          "actual": "ubiquity-os/ubiquity-os-kernel",
+          "ok": true
+        },
+        {
+          "name": "reload query B has no pinned extra option",
+          "expected": 5,
+          "actual": 5,
+          "ok": true
+        },
+        {
+          "name": "reload query B issue href",
+          "expected": "https://github.com/ubiquity-os/ubiquity-os-kernel/issues/new?title=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.&body=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.",
+          "actual": "https://github.com/ubiquity-os/ubiquity-os-kernel/issues/new?title=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.&body=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.",
+          "ok": true
+        },
+        {
+          "name": "reload query B decoded title",
+          "expected": "Route a new webhook command to the correct plugin in the kernel.",
+          "actual": "Route a new webhook command to the correct plugin in the kernel.",
+          "ok": true
+        },
+        {
+          "name": "reload query B decoded body",
+          "expected": "Route a new webhook command to the correct plugin in the kernel.",
+          "actual": "Route a new webhook command to the correct plugin in the kernel.",
+          "ok": true
+        },
+        {
+          "name": "reload query B location unchanged",
+          "expected": "http://127.0.0.1:8138/proposal-router/",
+          "actual": "http://127.0.0.1:8138/proposal-router/",
+          "ok": true
+        }
+      ],
+      "durationMs": 227
+    },
+    {
+      "id": "09-clipboard",
+      "description": "acceptance 6: real copy clicks with a controlled clipboard stub, resolve then reject",
+      "status": "passed",
+      "assertions": [
+        {
+          "name": "clipboard stub installed over navigator.clipboard",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "clipboard stub installed on the kernel issue URL",
+          "expected": "https://github.com/ubiquity-os/ubiquity-os-kernel/issues/new?title=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.&body=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.",
+          "actual": "https://github.com/ubiquity-os/ubiquity-os-kernel/issues/new?title=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.&body=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.",
+          "ok": true
+        },
+        {
+          "name": "issue link is enabled before copying",
+          "expected": "false",
+          "actual": "false",
+          "ok": true
+        },
+        {
+          "name": "copy success label",
+          "expected": "Copied",
+          "actual": "Copied",
+          "ok": true
+        },
+        {
+          "name": "copy success recorded exactly one write",
+          "expected": 1,
+          "actual": 1,
+          "ok": true
+        },
+        {
+          "name": "copy success captured the exact href",
+          "expected": "https://github.com/ubiquity-os/ubiquity-os-kernel/issues/new?title=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.&body=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.",
+          "actual": "https://github.com/ubiquity-os/ubiquity-os-kernel/issues/new?title=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.&body=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.",
+          "ok": true
+        },
+        {
+          "name": "copy success left the issue href unchanged",
+          "expected": "https://github.com/ubiquity-os/ubiquity-os-kernel/issues/new?title=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.&body=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.",
+          "actual": "https://github.com/ubiquity-os/ubiquity-os-kernel/issues/new?title=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.&body=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.",
+          "ok": true
+        },
+        {
+          "name": "copy success left the page on the local origin",
+          "expected": "http://127.0.0.1:8138/proposal-router/",
+          "actual": "http://127.0.0.1:8138/proposal-router/",
+          "ok": true
+        },
+        {
+          "name": "clipboard stub switched to reject",
+          "expected": "reject",
+          "actual": "reject",
+          "ok": true
+        },
+        {
+          "name": "clipboard stub kept the first captured write",
+          "expected": 1,
+          "actual": 1,
+          "ok": true
+        },
+        {
+          "name": "copy failure label",
+          "expected": "Copy failed",
+          "actual": "Copy failed",
+          "ok": true
+        },
+        {
+          "name": "copy failure never reported success",
+          "expected": true,
+          "actual": true,
+          "ok": true,
+          "detail": "Copy failed"
+        },
+        {
+          "name": "copy failure recorded a second write",
+          "expected": 2,
+          "actual": 2,
+          "ok": true
+        },
+        {
+          "name": "copy failure captured the exact href",
+          "expected": "https://github.com/ubiquity-os/ubiquity-os-kernel/issues/new?title=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.&body=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.",
+          "actual": "https://github.com/ubiquity-os/ubiquity-os-kernel/issues/new?title=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.&body=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.",
+          "ok": true
+        },
+        {
+          "name": "copy failure left the issue href unchanged",
+          "expected": "https://github.com/ubiquity-os/ubiquity-os-kernel/issues/new?title=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.&body=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.",
+          "actual": "https://github.com/ubiquity-os/ubiquity-os-kernel/issues/new?title=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.&body=Route+a+new+webhook+command+to+the+correct+plugin+in+the+kernel.",
+          "ok": true
+        },
+        {
+          "name": "copy failure exposes the clipboard-unavailable hint",
+          "expected": true,
+          "actual": true,
+          "ok": true,
+          "detail": "Clipboard blocked. Copy the address from the Open GitHub Issue link instead."
+        },
+        {
+          "name": "copy feedback reset was suppressed for stable evidence",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "screenshot-copy-failed exists",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "screenshot-copy-failed is non-empty",
+          "expected": true,
+          "actual": true,
+          "ok": true,
+          "detail": "88056"
+        },
+        {
+          "name": "screenshot-copy-failed has a PNG signature",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        }
+      ],
+      "durationMs": 122
+    },
+    {
+      "id": "99-cleanup",
+      "description": "close only the owned session, verify no launched browser remains, and shut down the local server",
+      "status": "passed",
+      "assertions": [
+        {
+          "name": "owned session close exit code",
+          "expected": 0,
+          "actual": 0,
+          "ok": true
+        },
+        {
+          "name": "owned session close reported success",
+          "expected": true,
+          "actual": true,
+          "ok": true
+        },
+        {
+          "name": "post-close session info reports the owned session",
+          "expected": "proposal-router",
+          "actual": "proposal-router",
+          "ok": true
+        },
+        {
+          "name": "post-close session info reports the owned namespace",
+          "expected": "uos-pr-cleanup-01a0c790",
+          "actual": "uos-pr-cleanup-01a0c790",
+          "ok": true
+        },
+        {
+          "name": "owned session proposal-router has no launched browser after close (browserLaunched=false/pageCount=0 or absent runtime); close alone does not prove daemon termination",
+          "expected": true,
+          "actual": true,
+          "ok": true,
+          "detail": "{\"status\":\"idle\",\"exitCode\":0,\"timedOut\":false,\"session\":\"proposal-router\",\"namespace\":\"uos-pr-cleanup-01a0c790\",\"active\":true,\"pid\":3157880,\"browserLaunched\":false,\"pageCount\":0,\"runtimeReported\":true,\"detail\":\"{\\\"success\\\":true,\\\"data\\\":{\\\"active\\\":true,\\\"namespace\\\":\\\"uos-pr-cleanup-01a0c790\\\",\\\"pid\\\":3157880,\\\"runtime\\\":{\\\"backgroundPid\\\":3157880,\\\"browserLaunched\\\":false,\\\"compatibilityStatus…"
+        }
+      ],
+      "durationMs": 214
+    }
+  ],
+  "artifacts": {
+    "agent-browser-config": {
+      "path": ".cleanup-evidence/proposal-browser-proof/agent-browser.config.json",
+      "bytes": 3,
+      "sha256": "ca3d163bab055381827226140568f3bef7eaac187cebd76878e0b63e9e442356"
+    },
+    "snapshot-initial": {
+      "path": ".cleanup-evidence/proposal-browser-proof/snapshot-initial.json",
+      "bytes": 2845,
+      "sha256": "6686f332ddfdce127dfc1b2a17af78761797976942f0852c0b52cfba9243a4fa"
+    },
+    "snapshot-query-b": {
+      "path": ".cleanup-evidence/proposal-browser-proof/snapshot-query-b.json",
+      "bytes": 3020,
+      "sha256": "7b33512fc52c24298fdd22f22786ca68ffe00f4423da34d26f3d9f206c206d06"
+    },
+    "screenshot-normal": {
+      "path": ".cleanup-evidence/proposal-browser-proof/screenshot-normal.png",
+      "bytes": 88672,
+      "sha256": "aa1e951d13a38cd2944dbee431d77f4a199572bf1b28ac5a9c282388f7ebac10"
+    },
+    "screenshot-copy-failed": {
+      "path": ".cleanup-evidence/proposal-browser-proof/screenshot-copy-failed.png",
+      "bytes": 88056,
+      "sha256": "3b78334fae93341a71e85f4c0681eb56fcf7a071afffca73c6f3a819fde910c1"
+    },
+    "transcript": {
+      "path": ".cleanup-evidence/proposal-browser-proof/transcript.jsonl",
+      "bytes": 57080,
+      "sha256": "272d0bfe7852703e1ad55632213f9331dcfec52cc4184c5a32f487beb7dfa737"
+    }
+  },
+  "notes": [
+    "Unit proof ref d13d5385e71680429929ef82dc8e6bf2d1ce3e69610e8e8c676c3d13dc2b112e/2e9852da-b456-46b9-8415-d609b3e8b7e6 was executed by the primary before this driver; this driver does not rerun it.",
+    "Clipboard evidence uses a controlled in-page `navigator.clipboard.writeText` stub (installed via agent-browser eval) so success and rejection are deterministic and credential-free. The real #copy-link click handler and real Clipboard API call path run unchanged.",
+    "The stub also suppresses only the cosmetic 1400 ms `Copy Link` label reset timer so `Copied` / `Copy failed` stay stable for the assertions and the failure screenshot; the reset behavior itself is not part of the required acceptance.",
+    "The GitHub issue URL is only read from the DOM; `Open GitHub Issue` is never clicked, no github.com request is made, and proposal text is synthetic.",
+    "Cleanup evidence uses exact `session info` runtime metadata for this owned namespace/session. On agent-browser 0.36.0, `session list` returned [] while the exact session still reported browserLaunched:true/pageCount:1, so list is not an authoritative absence check. `sessionTouched` is set immediately before the owned open attempt, so a partial or failed open still reaches cleanup."
+  ],
+  "errors": []
+}
