@@ -7,6 +7,11 @@ const suggestionsList = document.querySelector("#suggestions");
 const issueLink = document.querySelector("#issue-link");
 const copyButton = document.querySelector("#copy-link");
 
+// Declared before the catalog load: loadRepositories() runs at module top level and sets this flag when
+// the fetch fails, so a declaration below this line would be in its temporal dead zone at that moment.
+// While true, the recovery notice owns suggestionsList and a proposal edit must not clear it (#138).
+let catalogUnavailable = false;
+
 const repositories = await loadRepositories();
 
 let currentSuggestions = [];
@@ -28,6 +33,7 @@ async function loadRepositories() {
     }
     return catalog;
   } catch {
+    catalogUnavailable = true;
     const notice = document.createElement("li");
     notice.textContent = "Repository catalog unavailable. Serve this folder over HTTP and reload.";
     suggestionsList.replaceChildren(notice);
@@ -99,6 +105,11 @@ function updateIssueLink() {
 }
 
 function updateSuggestions() {
+  // No catalog means no suggestions and no selection to resolve; rendering anything here would replace
+  // the recovery notice with an empty list and leave the user with a disabled selector and no reason.
+  if (catalogUnavailable) {
+    return;
+  }
   const proposal = proposalInput.value;
   currentSuggestions = rankRepositories(repositories, proposal, 5);
 
